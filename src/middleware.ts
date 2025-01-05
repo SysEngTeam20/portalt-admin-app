@@ -17,7 +17,7 @@ export default clerkMiddleware(async (auth, req) => {
     }
 
     // User is signed in and didn't select an organization yet during his session
-    if (userId && !sessionClaims.org_id) {
+    if (userId && !sessionClaims.org_id && req.nextUrl.pathname !== "/organization-select") {
         return Response.redirect(new URL("/organization-select", req.url));
     }
 
