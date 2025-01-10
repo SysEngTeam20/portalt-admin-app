@@ -20,7 +20,6 @@ export function Navbar() {
           {/* Logo */}
           <div className="flex-shrink-0">
             <Link href="/" className="flex items-center">
-              {/* Replace with your logo */}
               <span className="text-xl font-bold text-blue-700">AppLogo</span>
             </Link>
           </div>
@@ -48,12 +47,6 @@ export function Navbar() {
           {/* User Menu */}
           <div className="flex items-center space-x-4">
             <OrganizationSwitcher 
-            //   appearance={{
-            //     elements: {
-            //       rootBox: "flex justify-center",
-            //       organizationSwitcherTrigger: "flex items-center gap-2 px-4 py-2 rounded-md bg-gray-50 hover:bg-gray-100",
-            //     }
-            //   }}
               afterSelectOrganizationUrl="/"
               afterCreateOrganizationUrl="/"
               afterLeaveOrganizationUrl="/"
