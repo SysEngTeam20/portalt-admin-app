@@ -58,11 +58,10 @@ export default function HomePage() {
               <CardContent className="p-0">
                 {activity.bannerUrl && (
                   <div className="relative w-full h-48">
-                    <Image
+                    <img
                       src={activity.bannerUrl}
                       alt={activity.title}
-                      fill
-                      className="object-cover rounded-t-lg"
+                      className="object-cover rounded-t-lg fill-current"
                     />
                   </div>
                 )}

@@ -1,5 +1,5 @@
 import { getAuth } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import { NextApiRequest, NextApiResponse } from "next";
 
@@ -13,7 +13,6 @@ export async function GET(
     
     if (!orgId) {
       return new NextResponse("Unauthorized", { status: 401 });
-      // return res.status(401).json({ message: "Unauthorized" });
     }
 
     const client = await clientPromise;
@@ -26,28 +25,32 @@ export async function GET(
       .toArray();
 
       return NextResponse.json(activities);
-      // return res.json(activities);
   } catch (error) {
     console.error("[ACTIVITIES_GET]", error);
     return new NextResponse("Internal Error", { status: 500 });
-    // return res.status(500).json({ message: "Internal Error" });
   }
 }
 
-export async function POST(req: NextApiRequest, res: NextApiResponse) {
+export async function POST(req: NextRequest) {
   try {
     const { orgId } = getAuth(req);
     
     if (!orgId) {
       return new NextResponse("Unauthorized", { status: 401 });
-      // return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const { title, bannerUrl } = await req.body;
+    const { title, bannerUrl, platform, format } = await req.json();
 
     if (!title) {
       return new NextResponse("Title is required", { status: 400 });
-      // return res.status(400).json({ message: "Title is required" });
+    }
+
+    if (!format || !["AR", "VR"].includes(format)) {
+      return new NextResponse("Valid format (AR/VR) is required", { status: 400 });
+    }
+
+    if (!platform || !["headset", "web"].includes(platform)) {
+      return new NextResponse("Valid platform (headset/web) is required", { status: 400 });
     }
 
     const client = await clientPromise;
@@ -56,6 +59,8 @@ export async function POST(req: NextApiRequest, res: NextApiResponse) {
     const activity = {
       title,
       bannerUrl: bannerUrl || "",
+      platform: platform,
+      format: format,
       orgId,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -67,13 +72,8 @@ export async function POST(req: NextApiRequest, res: NextApiResponse) {
       ...activity, 
       _id: result.insertedId 
     });
-    // return res.json({ 
-    //   ...activity, 
-    //   _id: result.insertedId 
-    // });
   } catch (error) {
     console.error("[ACTIVITIES_POST]", error);
     return new NextResponse("Internal Error", { status: 500 });
-    // return res.status(500).json({ message: "Internal Error" });
   }
 }
