@@ -57,22 +57,22 @@ export function SceneEditor({ activity }: SceneEditorProps) {
 
   if (activity.format === 'AR') {
     return (
-      <Card className="bg-white/5 backdrop-blur-sm border-gray-700 p-6">
+      <Card className="bg-white border-gray-200 p-6 shadow-sm">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-white">Scene 1</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Scene 1</h2>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="text-gray-200">
+            <Button variant="outline" size="sm" className="text-gray-600">
               <Eye className="h-4 w-4 mr-2" />
               View
             </Button>
-            <Button variant="outline" size="sm" className="text-gray-200">
+            <Button variant="outline" size="sm" className="text-gray-600">
               <Edit3 className="h-4 w-4 mr-2" />
               Edit
             </Button>
           </div>
         </div>
-        <div className="aspect-video bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center">
-          <p className="text-gray-400">Scene preview will appear here</p>
+        <div className="aspect-video bg-gray-50 rounded-lg border border-gray-200 flex items-center justify-center">
+          <p className="text-gray-500">Scene preview will appear here</p>
         </div>
       </Card>
     );
@@ -81,13 +81,13 @@ export function SceneEditor({ activity }: SceneEditorProps) {
   return (
     <div className="flex gap-6">
       {/* Scene Sequence */}
-      <Card className="w-64 bg-white/5 backdrop-blur-sm border-gray-700 p-4">
+      <Card className="w-64 bg-white border-gray-200 p-4 shadow-sm">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">Scene Sequence</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Scene Sequence</h2>
           <Button 
             size="sm" 
             variant="ghost" 
-            className="text-gray-200"
+            className="text-gray-600"
             onClick={() => {
               const newScene = {
                 id: Date.now().toString(),
@@ -112,19 +112,19 @@ export function SceneEditor({ activity }: SceneEditorProps) {
               className={`
                 p-3 rounded-lg border transition-colors cursor-move
                 ${draggedScene?.id === scene.id ? 'opacity-50' : 'opacity-100'}
-                ${selectedScene === scene.id ? 'border-blue-500 bg-gray-700' : 'border-gray-700 bg-gray-800'}
-                hover:border-gray-600
+                ${selectedScene === scene.id ? 'border-blue-500 bg-gray-100' : 'border-gray-200 bg-gray-50'}
+                hover:border-gray-300
               `}
               onClick={() => setSelectedScene(scene.id)}
             >
               <div className="flex items-center justify-between">
-                <span className="text-gray-200">Scene {scene.order}</span>
+                <span className="text-gray-700">Scene {scene.order}</span>
                 <div className="flex gap-1">
                   <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
-                    <Eye className="h-3 w-3 text-gray-400" />
+                    <Eye className="h-3 w-3 text-gray-500" />
                   </Button>
                   <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
-                    <Edit3 className="h-3 w-3 text-gray-400" />
+                    <Edit3 className="h-3 w-3 text-gray-500" />
                   </Button>
                 </div>
               </div>
@@ -134,31 +134,31 @@ export function SceneEditor({ activity }: SceneEditorProps) {
       </Card>
 
       {/* Scene Preview/Editor */}
-      <Card className="flex-1 bg-white/5 backdrop-blur-sm border-gray-700 p-6">
+      <Card className="flex-1 bg-white border-gray-200 p-6 shadow-sm">
         {selectedScene ? (
           <>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-white">
+              <h2 className="text-xl font-semibold text-gray-900">
                 Scene {scenes.find(s => s.id === selectedScene)?.order}
               </h2>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="text-gray-200">
+                <Button variant="outline" size="sm" className="text-gray-600">
                   <Eye className="h-4 w-4 mr-2" />
                   View
                 </Button>
-                <Button variant="outline" size="sm" className="text-gray-200">
+                <Button variant="outline" size="sm" className="text-gray-600">
                   <Edit3 className="h-4 w-4 mr-2" />
                   Edit
                 </Button>
               </div>
             </div>
-            <div className="aspect-video bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center">
-              <p className="text-gray-400">Scene preview will appear here</p>
+            <div className="aspect-video bg-gray-50 rounded-lg border border-gray-200 flex items-center justify-center">
+              <p className="text-gray-500">Scene preview will appear here</p>
             </div>
           </>
         ) : (
           <div className="h-full flex items-center justify-center">
-            <p className="text-gray-400">Select a scene to view or edit</p>
+            <p className="text-gray-500">Select a scene to view or edit</p>
           </div>
         )}
       </Card>

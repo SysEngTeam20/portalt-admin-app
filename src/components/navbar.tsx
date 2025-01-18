@@ -20,7 +20,7 @@ export function Navbar() {
           {/* Logo */}
           <div className="flex-shrink-0">
             <Link href="/" className="flex items-center">
-              <span className="text-xl font-bold text-blue-700">AppLogo</span>
+              <span className="text-xl font-bold text-blue-700">Portalt</span>
             </Link>
           </div>
 
