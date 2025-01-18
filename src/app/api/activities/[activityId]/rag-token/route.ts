@@ -1,12 +1,19 @@
+// app/api/activities/[activityId]/rag-token/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getAuth } from "@clerk/nextjs/server";
 import { ObjectId } from "mongodb";
 import clientPromise from "@/lib/mongodb";
 import { generateLLMToken } from "@/lib/tokens";
 
+type Props = {
+  params: {
+    activityId: string;
+  };
+};
+
 export async function POST(
   request: NextRequest,
-  { params }: { params: { activityId: string } }
+  { params }: Props
 ) {
   try {
     const { orgId } = getAuth(request);
