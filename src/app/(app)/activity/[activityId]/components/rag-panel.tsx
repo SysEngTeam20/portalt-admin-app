@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Plus, FileText, Trash2, Upload, Library } from 'lucide-react';
+import { Plus, FileText, Trash2, Upload, Library, ExternalLink } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -158,6 +158,22 @@ export function RagPanel({ activity }: RagPanelProps) {
     }
   };
 
+  const handleViewDocument = async (documentId: string) => {
+    try {
+      const response = await fetch(`/api/documents/${documentId}/access`);
+      if (!response.ok) throw new Error('Failed to get document access');
+      
+      const { url } = await response.json();
+      window.open(url, '_blank');
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to open document",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleDelete = async (documentId: string) => {
     try {
       const response = await fetch(`/api/documents/${documentId}/unlink`, {
@@ -185,7 +201,7 @@ export function RagPanel({ activity }: RagPanelProps) {
   return (
     <Card className="p-6">
       <div className="space-y-8">
-        {/* RAG Enable Switch */}
+        {/* RAG Enable Switch - unchanged */}
         <div className="flex items-center justify-between p-4 rounded-lg border">
           <div className="space-y-1">
             <h3 className="text-lg font-medium">Enable RAG on activity</h3>
@@ -201,6 +217,7 @@ export function RagPanel({ activity }: RagPanelProps) {
 
         {/* Source Documents */}
         <div className="space-y-4">
+          {/* Header - unchanged */}
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-medium">Source Documents</h3>
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -218,7 +235,7 @@ export function RagPanel({ activity }: RagPanelProps) {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid grid-cols-2 gap-4 pt-4">
-                  {/* Upload Option */}
+                  {/* Upload Option - unchanged */}
                   <Button
                     variant="outline"
                     className="h-32 flex flex-col items-center justify-center gap-2"
@@ -235,7 +252,7 @@ export function RagPanel({ activity }: RagPanelProps) {
                     onChange={handleFileUpload}
                   />
 
-                  {/* Select from Library Option */}
+                  {/* Select from Library Option - unchanged */}
                   <Button
                     variant="outline"
                     className="h-32 flex flex-col items-center justify-center gap-2"
@@ -246,20 +263,32 @@ export function RagPanel({ activity }: RagPanelProps) {
                   </Button>
                 </div>
 
-                {/* Library Documents List */}
+                {/* Library Documents List - Updated with View button */}
                 {dialogOpen && (
                   <ScrollArea className="h-72 mt-4">
                     <div className="space-y-2">
                       {libraryDocuments.map((doc) => (
                         <div
                           key={doc._id}
-                          className="flex items-center justify-between p-3 rounded-lg border hover:bg-gray-50 cursor-pointer"
-                          onClick={() => handleLibrarySelect(doc)}
+                          className="flex items-center justify-between p-3 rounded-lg border hover:bg-gray-50"
                         >
-                          <div className="flex items-center gap-3">
+                          <div 
+                            className="flex items-center gap-3 flex-1 cursor-pointer"
+                            onClick={() => handleLibrarySelect(doc)}
+                          >
                             <FileText className="h-5 w-5 text-gray-400" />
-                            <span>{doc.filename}</span>
+                            <span className="flex-1">{doc.filename}</span>
                           </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewDocument(doc._id);
+                            }}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
                         </div>
                       ))}
                     </div>
@@ -269,25 +298,35 @@ export function RagPanel({ activity }: RagPanelProps) {
             </Dialog>
           </div>
 
-          {/* Documents List */}
+          {/* Documents List - Updated with View button */}
           <div className="space-y-2">
             {documents.map((doc) => (
               <div
                 key={doc._id}
                 className="flex items-center justify-between p-3 rounded-lg border"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-1">
                   <FileText className="h-5 w-5 text-gray-400" />
                   <span>{doc.filename}</span>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDelete(doc._id)}
-                  className="text-gray-400 hover:text-red-400"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleViewDocument(doc._id)}
+                    className="text-gray-400 hover:text-blue-500"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDelete(doc._id)}
+                    className="text-gray-400 hover:text-red-400"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             ))}
 
