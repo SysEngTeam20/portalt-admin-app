@@ -4,20 +4,26 @@ import { ObjectId } from "mongodb";
 import clientPromise from "@/lib/mongodb";
 import { generateLLMToken } from "@/lib/tokens";
 
+type RouteContext = {
+  params: { activityId: string };
+  searchParams: { [key: string]: string | string[] | undefined };
+};
+
 export async function POST(
   request: NextRequest,
-  { params }: { params: { activityId: string } }
+  context: RouteContext
 ) {
   try {
     const { orgId } = getAuth(request);
     if (!orgId) return new NextResponse("Unauthorized", { status: 401 });
     
+    const { activityId } = context.params;
     const client = await clientPromise;
     const db = client.db("cluster0");
 
     // Verify activity exists and belongs to organization
     const activity = await db.collection("activities").findOne({
-      _id: new ObjectId(params.activityId),
+      _id: new ObjectId(activityId),
       orgId,
       ragEnabled: true
     });
@@ -27,7 +33,7 @@ export async function POST(
     }
 
     // Generate a new LLM access token
-    const token = await generateLLMToken(params.activityId);
+    const token = await generateLLMToken(activityId);
 
     return NextResponse.json({ token });
   } catch (error) {
