@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 const navigation = [
   { name: "Home", href: "/" },
   { name: "Asset Library", href: "/library" },
-  { name: "Log Center", href: "/logs" },
+  // { name: "Log Center", href: "/logs" },
 ];
 
 export function Navbar() {

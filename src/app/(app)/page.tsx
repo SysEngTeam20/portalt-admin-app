@@ -38,7 +38,7 @@ export default function HomePage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Activities</h1>
+        <h1 className="text-2xl font-bold">Activities</h1>
         <Button 
           onClick={() => router.push('/activity/new')}
           className="flex items-center gap-2"
