@@ -101,14 +101,14 @@ export default function CreateActivityPage() {
                   placeholder="https://example.com/image.jpg"
                   type="url"
                 />
-                <Button 
+                {/* <Button 
                   type="button" 
                   variant="outline"
                   className="flex gap-2"
                 >
                   <ImageIcon className="w-4 h-4" />
                   Upload
-                </Button>
+                </Button> */}
               </div>
             </div>
 

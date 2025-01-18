@@ -125,14 +125,14 @@ export function SettingsPanel({ activity, onUpdate }: SettingsPanelProps) {
               placeholder="https://example.com/image.jpg"
               type="url"
             />
-            <Button 
+            {/* <Button 
               type="button" 
               variant="outline" 
               className="flex gap-2"
             >
               <ImagePlus className="h-4 w-4" />
               Upload
-            </Button>
+            </Button> */}
           </div>
         </div>
 
