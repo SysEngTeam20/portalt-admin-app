@@ -1,18 +1,23 @@
+// app/api/activities/[activityId]/rag-token/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getAuth } from "@clerk/nextjs/server";
 import { ObjectId } from "mongodb";
 import clientPromise from "@/lib/mongodb";
 import { generateLLMToken } from "@/lib/tokens";
 
+type Props = {
+  params: {
+    activityId: string;
+  };
+};
+
 export async function POST(
-  req: NextRequest,
-  context: { params: { activityId: string } }
+  request: NextRequest,
+  { params }: Props
 ) {
   try {
-    const { orgId } = getAuth(req);
+    const { orgId } = getAuth(request);
     if (!orgId) return new NextResponse("Unauthorized", { status: 401 });
-
-    const params = await context.params;
     
     const client = await clientPromise;
     const db = client.db("cluster0");
