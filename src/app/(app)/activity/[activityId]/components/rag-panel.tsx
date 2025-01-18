@@ -74,7 +74,14 @@ export function RagPanel({ activity }: RagPanelProps) {
       const response = await fetch(`/api/activities/${activity._id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ragEnabled: enabled }),
+        body: JSON.stringify({
+          title: activity.title,
+          description: activity.description,
+          bannerUrl: activity.bannerUrl,
+          format: activity.format,
+          platform: activity.platform,
+          ragEnabled: enabled,
+        }),
       });
 
       if (!response.ok) throw new Error('Failed to update RAG setting');

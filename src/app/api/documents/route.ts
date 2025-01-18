@@ -36,53 +36,70 @@ export async function GET(req: NextRequest) {
 
 // POST upload new document
 export async function POST(req: NextRequest) {
-  try {
-    const { orgId } = getAuth(req);
-    if (!orgId) return new NextResponse("Unauthorized", { status: 401 });
-
-    const formData = await req.formData();
-    const file = formData.get('file') as File;
-    const activityId = formData.get('activityId') as string | null;
-    
-    if (!file) {
-      return new NextResponse("File is required", { status: 400 });
+    try {
+      const { orgId } = getAuth(req);
+      if (!orgId) return new NextResponse("Unauthorized", { status: 401 });
+  
+      const formData = await req.formData();
+      const file = formData.get('file') as File;
+      const activityId = formData.get('activityId') as string | null;
+      
+      if (!file) {
+        return new NextResponse("File is required", { status: 400 });
+      }
+  
+      console.log('Uploading file:', {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        activityId
+      });
+  
+      // Generate a safe filename
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const uniqueFilename = `${timestamp}-${safeName}`;
+  
+      // Upload to COS
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const cosKey = await uploadDocument(buffer, uniqueFilename, file.type);
+  
+      console.log('File uploaded to COS:', cosKey);
+  
+      const client = await clientPromise;
+      const db = client.db("cluster0");
+  
+      // Create document metadata
+      const document = {
+        _id: new ObjectId(),
+        filename: file.name,
+        originalName: file.name,
+        mimeType: file.type,
+        size: file.size,
+        url: cosKey,
+        orgId,
+        activityIds: activityId ? [activityId] : [],
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+  
+      await db.collection("documents").insertOne(document);
+  
+      // If activityId provided, update activity's documentIds
+      if (activityId) {
+        await db.collection("activities").updateOne(
+          { _id: new ObjectId(activityId), orgId },
+          { $addToSet: { documentIds: document._id.toString() } }
+        );
+      }
+  
+      return NextResponse.json(document);
+    } catch (error) {
+      console.error("[DOCUMENTS_POST]", error);
+      if (error instanceof Error) {
+        console.error("[DOCUMENTS_POST] Error details:", error.message);
+      }
+      return new NextResponse("Internal Error", { status: 500 });
     }
-
-    // Upload to COS
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const cosKey = await uploadDocument(buffer, file.name, file.type);
-
-    const client = await clientPromise;
-    const db = client.db("cluster0");
-
-    // Create document metadata
-    const document = {
-      _id: new ObjectId(),
-      filename: file.name,
-      originalName: file.name,
-      mimeType: file.type,
-      size: file.size,
-      url: cosKey,
-      orgId,
-      activityIds: activityId ? [activityId] : [],
-      metadata: {},
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    await db.collection("documents").insertOne(document);
-
-    // If activityId provided, update activity's documentIds
-    if (activityId) {
-      await db.collection("activities").updateOne(
-        { _id: new ObjectId(activityId), orgId },
-        { $addToSet: { documentIds: document._id.toString() } }
-      );
-    }
-
-    return NextResponse.json(document);
-  } catch (error) {
-    console.error("[DOCUMENTS_POST]", error);
-    return new NextResponse("Internal Error", { status: 500 });
   }
-}
