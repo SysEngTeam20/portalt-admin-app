@@ -50,6 +50,8 @@ COS_ENDPOINT=s3.xxx.cloud-object-storage.appdomain.cloud
 COS_ACCESS_KEY_ID=your_hmac_access_key_id
 COS_SECRET_ACCESS_KEY=your_hmac_secret_access_key
 COS_BUCKET_NAME=your_bucket_name
+COS_INSTANCE_CRN=your_instance_crn
+IBM_CLOUD_REGION=your_instances_region
 
 # API Security
 API_SECRET_KEY=your_jwt_signing_key
