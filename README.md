@@ -61,8 +61,8 @@ API_SECRET_KEY=your_jwt_signing_key
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/your-repo-name.git
-cd your-repo-name
+git clone https://github.com/SysEngTeam20/nextjs-admin-platform.git
+cd nextjs-admin-platform
 ```
 
 2. Install dependencies:
@@ -81,7 +81,7 @@ npm run dev
 
 ```
 ├── app/
-│   ├── (dashboard)/
+│   ├── (app)/
 │   │   ├── layout.tsx
 │   │   ├── page.tsx
 │   │   ├── activity/
@@ -90,17 +90,23 @@ npm run dev
 │   ├── api/
 │   │   ├── activities/
 │   │   ├── assets/
+│   │   ├── documents/
 │   │   └── llm/
+│   ├── api/
+│   │   └── page.tsx
 │   └── layout.tsx
 ├── components/
 │   ├── providers/
 │   │   └── toaster-provider.tsx
 │   ├── ui/
 │   └── navbar.tsx
+├── hooks/
+│   └── use-toast.ts
 ├── lib/
 │   ├── cos.ts
 │   ├── mongodb.ts
-│   └── tokens.ts
+│   ├── tokens.ts
+│   └── utils.ts
 ├── types/
 │   ├── activity.ts
 │   ├── asset.ts
