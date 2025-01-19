@@ -20,7 +20,8 @@ export function Navbar() {
           {/* Logo */}
           <div className="flex-shrink-0">
             <Link href="/" className="flex items-center">
-              <span className="text-xl font-bold text-blue-700">Portalt</span>
+              {/* <span className="text-xl font-bold text-blue-700">Portalt</span> */}
+              <img src="/logo.png" alt="logo" className=" h-7" />
             </Link>
           </div>
 
