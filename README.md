@@ -61,8 +61,8 @@ API_SECRET_KEY=your_jwt_signing_key
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/SysEngTeam20/nextjs-admin-platform.git
-cd nextjs-admin-platform
+git clone https://github.com/SysEngTeam20/portalt-portal.git
+cd portalt-portal
 ```
 
 2. Install dependencies:
