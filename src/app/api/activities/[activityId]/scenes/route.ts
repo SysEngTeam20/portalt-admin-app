@@ -21,7 +21,7 @@ interface Activity {
 // GET all scenes for an activity
 export async function GET(
   req: NextRequest,
-  { params }: { params: { activityId: string } }
+  { params }: any
 ) {
   try {
     const { orgId } = getAuth(req);
@@ -52,7 +52,7 @@ export async function GET(
 // POST create new scene
 export async function POST(
   req: NextRequest,
-  { params }: { params: { activityId: string } }
+  { params }: any
 ) {
   try {
     const { orgId } = getAuth(req);
@@ -101,7 +101,7 @@ export async function POST(
 // PUT update scene order
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { activityId: string } }
+  { params }: any
 ) {
   try {
     const { orgId } = getAuth(req);

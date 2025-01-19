@@ -49,7 +49,7 @@ async function findAssetOrDocument(db: any, id: string, orgId: string) {
 
 export async function GET(
   req: NextRequest,
-  context: { params: { assetId: string } }
+  context: any
 ) {
   try {
     const { orgId } = getAuth(req);
@@ -78,7 +78,7 @@ export async function GET(
 
 export async function PATCH(
     req: NextRequest,
-    context: { params: { assetId: string } }
+    context: any
   ) {
     try {
       const { orgId } = getAuth(req);
@@ -143,7 +143,7 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  context: { params: { assetId: string } }
+  context: any
 ) {
   try {
     const { orgId } = getAuth(req);

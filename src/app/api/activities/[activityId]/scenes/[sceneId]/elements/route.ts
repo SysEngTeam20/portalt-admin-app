@@ -25,7 +25,7 @@ interface Activity {
 // GET all elements for a scene
 export async function GET(
   req: NextRequest,
-  { params }: { params: { activityId: string; sceneId: string } }
+  { params }: any
 ) {
   try {
     const { orgId } = getAuth(req);
@@ -60,7 +60,7 @@ export async function GET(
 // POST create new element
 export async function POST(
   req: NextRequest,
-  { params }: { params: { activityId: string; sceneId: string } }
+  { params }: any
 ) {
   try {
     const { orgId } = getAuth(req);
@@ -113,7 +113,7 @@ export async function POST(
 // PUT update elements (for bulk updates/reordering)
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { activityId: string; sceneId: string } }
+  { params }: any
 ) {
   try {
     const { orgId } = getAuth(req);

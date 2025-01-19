@@ -15,7 +15,7 @@ function toObjectId(id: string) {
 
 export async function GET(
   req: NextRequest,
-  context: { params: { assetId: string } }
+  context: any
 ) {
   try {
     const { orgId } = getAuth(req);

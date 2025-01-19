@@ -6,7 +6,7 @@ import clientPromise from "@/lib/mongodb";
 // GET single activity
 export async function GET(
   req: NextRequest,
-  context: { params: { activityId: string } }
+  context: any
 ) {
   try {
     const params = await context.params;
@@ -38,7 +38,7 @@ export async function GET(
 // PATCH update activity
 export async function PATCH(
   req: NextRequest,
-  context: { params: { activityId: string } }
+  context: any
 ) {
   try {
     const params = await context.params;
@@ -106,7 +106,7 @@ export async function PATCH(
 // DELETE activity
 export async function DELETE(
   req: NextRequest,
-  context: { params: { activityId: string } }
+  context: any
 ) {
   try {
     const params = await context.params;

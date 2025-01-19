@@ -16,7 +16,7 @@ interface DocumentType extends Document {
 
 export async function POST(
     req: NextRequest,
-    context: { params: { documentId: string } }
+    context: any
   ) {
     try {
       const { orgId } = getAuth(req);

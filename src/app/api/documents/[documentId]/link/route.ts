@@ -5,7 +5,7 @@ import clientPromise from "@/lib/mongodb";
 
 export async function POST(
   req: NextRequest,
-  context: { params: { documentId: string } }
+  context: any
 ) {
   try {
     const { orgId } = getAuth(req);

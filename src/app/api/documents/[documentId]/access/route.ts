@@ -6,7 +6,7 @@ import { getSignedUrl } from "@/lib/cos";
 
 export async function GET(
   req: NextRequest,
-  context: { params: { documentId: string } }
+  context: any
 ) {
   try {
     const { orgId } = getAuth(req);
