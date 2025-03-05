@@ -1,11 +1,18 @@
 {
-  "name": "admin-app",
-  "version": "0.1.0",
-  "private": true,
+  "name": "portalt",
+  "version": "1.0.0",
+  "description": "Portalt Next.js Electron App",
+  "main": "app/electron/main.js",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "concurrently -k \"npm run dev:next\" \"npm run dev:electron\"",
+    "dev:next": "next dev",
+    "dev:electron": "wait-on http://localhost:3000 && tsc -p electron && electron .",
+    "build": "npm run build:next && npm run build:electron",
+    "build:next": "next build",
+    "build:electron": "tsc -p electron",
+    "pack-app": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "start": "electron .",
     "lint": "next lint"
   },
   "dependencies": {
@@ -23,6 +30,8 @@
     "@radix-ui/react-toast": "^1.2.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "electron": "^35.0.0",
+    "electron-serve": "^2.1.1",
     "ibm-cos-sdk": "^1.14.0",
     "jose": "^5.9.6",
     "lucide-react": "^0.469.0",
@@ -37,8 +46,12 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^9.1.2",
+    "electron-builder": "^25.1.8",
+    "electron-is-dev": "^3.0.1",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^8.0.2"
   }
 }
