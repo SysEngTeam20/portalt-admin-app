@@ -1,50 +1,45 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuth } from "@clerk/nextjs/server";
-import { ObjectId } from "mongodb";
-import clientPromise from "@/lib/mongodb";
+import { getDbClient } from "@/lib/db";
 import { deleteDocument, getSignedUrl } from "@/lib/cos";
 
-// Helper function to safely convert string to ObjectId
-function toObjectId(id: string) {
-  try {
-    return new ObjectId(id);
-  } catch (error) {
-    return null;
-  }
+interface AssetDocument {
+  _id: string;
+  orgId: string;
+  url: string;
+  name: string;
+  updatedAt: string;
+  // ... other fields
 }
 
-// Helper function to find asset or document
-async function findAssetOrDocument(db: any, id: string, orgId: string) {
-  const objectId = toObjectId(id);
-  if (!objectId) return null;
+interface Document {
+  _id: string;
+  orgId: string;
+  url: string;
+  filename: string;
+  updatedAt: string;
+  // ... other fields
+}
 
-  // Try documents collection first
-  const doc = await db.collection("documents").findOne({
-    _id: objectId,
-    orgId
-  });
+async function findAssetOrDocument(orgId: string, assetId: string) {
+  const client = getDbClient();
+  const db = client.db("cluster0");
+  
+  const documents = db.collection<Document>("documents");
+  const doc = await documents.findOne({ 
+    _id: assetId, 
+    orgId 
+  } as any);
 
-  if (doc) {
-    return {
-      type: 'document',
-      data: doc
-    };
-  }
+  if (doc) return { type: 'document', data: doc };
 
-  // Then try assets collection
-  const asset = await db.collection("assets").findOne({
-    _id: objectId,
-    orgId
-  });
+  const assets = db.collection<AssetDocument>("assets");
+  const asset = await assets.findOne({ 
+    _id: assetId, 
+    orgId 
+  } as any);
 
-  if (asset) {
-    return {
-      type: 'asset',
-      data: asset
-    };
-  }
-
-  return null;
+  return asset ? { type: 'asset', data: asset } : null;
 }
 
 export default async function handler(
@@ -56,100 +51,71 @@ export default async function handler(
     if (!orgId) return res.status(401).json({ message: "Unauthorized" });
 
     const assetId = req.query.assetId as string;
-    const client = await clientPromise;
+    const client = getDbClient();
     const db = client.db("cluster0");
 
-    // GET asset details
     if (req.method === 'GET') {
-      const result = await findAssetOrDocument(db, assetId, orgId);
-
-      if (!result) {
-        return res.status(404).json({ message: "Asset not found" });
-      }
-
-      // Generate signed URL regardless of type since both use COS
+      const result = await findAssetOrDocument(orgId, assetId);
+      if (!result) return res.status(404).json({ message: "Asset not found" });
+      
       const signedUrl = await getSignedUrl(result.data.url, 900);
-
-      return res.status(200).json({ url: signedUrl });
+      return res.status(200).json({ ...result.data, url: signedUrl });
     }
-    
-    // PATCH update asset
-    else if (req.method === 'PATCH') {
+
+    if (req.method === 'PATCH') {
       const { name } = req.body;
+      if (!name?.trim()) return res.status(400).json({ message: "Name is required" });
 
-      if (!name?.trim()) {
-        return res.status(400).json({ message: "Name is required" });
-      }
+      const result = await findAssetOrDocument(orgId, assetId);
+      if (!result) return res.status(404).json({ message: "Asset not found" });
 
-      const objectId = toObjectId(assetId);
-      if (!objectId) {
-        return res.status(400).json({ message: "Invalid ID format" });
-      }
+      const collection = result.type === 'document' ? 
+        db.collection<Document>("documents") : 
+        db.collection<AssetDocument>("assets");
 
-      // Find which collection the item is in
-      const result = await findAssetOrDocument(db, assetId, orgId);
-      if (!result) {
+      const updateResult = await collection.updateOne(
+        { _id: assetId, orgId } as any,
+        { 
+          $set: { 
+            ...(result.type === 'document' ? { filename: name } : {}),
+            name,
+            updatedAt: new Date().toISOString()
+          } 
+        } as any
+      );
+
+      if (updateResult.matchedCount === 0) {
         return res.status(404).json({ message: "Asset not found" });
       }
 
-      if (result.type === 'document') {
-        await db.collection("documents").updateOne(
-          { _id: objectId, orgId },
-          { 
-            $set: { 
-              filename: name,
-              name: name,
-              updatedAt: new Date() 
-            } 
-          }
-        );
-
-        // Fetch updated document
-        const updatedDoc = await db.collection("documents").findOne({ _id: objectId, orgId });
-        return res.status(200).json(updatedDoc);
-      } else {
-        await db.collection("assets").updateOne(
-          { _id: objectId, orgId },
-          { 
-            $set: { 
-              name: name,
-              updatedAt: new Date() 
-            } 
-          }
-        );
-
-        // Fetch updated asset
-        const updatedAsset = await db.collection("assets").findOne({ _id: objectId, orgId });
-        return res.status(200).json(updatedAsset);
-      }
+      const updatedDoc = await collection.findOne({ _id: assetId, orgId } as any);
+      return res.status(200).json(updatedDoc);
     }
-    
-    // DELETE asset
-    else if (req.method === 'DELETE') {
-      const result = await findAssetOrDocument(db, assetId, orgId);
-      if (!result) {
+
+    if (req.method === 'DELETE') {
+      const result = await findAssetOrDocument(orgId, assetId);
+      if (!result) return res.status(404).json({ message: "Asset not found" });
+
+      await deleteDocument(result.data.url);
+      
+      const collection = result.type === 'document' ? 
+        db.collection<Document>("documents") : 
+        db.collection<AssetDocument>("assets");
+
+      const deleteResult = await collection.deleteOne({ 
+        _id: assetId, 
+        orgId 
+      } as any);
+
+      if (deleteResult.deletedCount === 0) {
         return res.status(404).json({ message: "Asset not found" });
       }
-
-      // Delete from COS
-      await deleteDocument(result.data.url);
-
-      // Delete from appropriate collection
-      const collection = result.type === 'document' ? "documents" : "assets";
-      const filter: any = { orgId };
-      if (assetId) {
-        filter._id = toObjectId(assetId);
-      }
-      await db.collection(collection).deleteOne(filter);
 
       return res.status(204).end();
     }
-    
-    // Handle unsupported methods
-    else {
-      res.setHeader('Allow', ['GET', 'PATCH', 'DELETE']);
-      return res.status(405).json({ message: `Method ${req.method} Not Allowed` });
-    }
+
+    res.setHeader('Allow', ['GET', 'PATCH', 'DELETE']);
+    return res.status(405).json({ message: `Method ${req.method} Not Allowed` });
   } catch (error) {
     console.error("[ASSET_API]", error);
     return res.status(500).json({ message: "Internal Error" });

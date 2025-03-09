@@ -1,8 +1,15 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuth } from "@clerk/nextjs/server";
-import { ObjectId } from "mongodb";
-import clientPromise from "@/lib/mongodb";
+import { getDbClient, Relations } from "@/lib/db";
+import { v4 as uuidv4 } from 'uuid';
 import { generateLLMToken } from "@/lib/tokens";
+
+// Add explicit type for query
+interface ActivityQuery {
+  _id: string;
+  orgId: string;
+  ragEnabled: boolean;
+}
 
 export default async function handler(
   req: NextApiRequest,
@@ -18,17 +25,18 @@ export default async function handler(
     const { orgId } = getAuth(req);
     if (!orgId) return res.status(401).json({ message: "Unauthorized" });
 
-    const client = await clientPromise;
+    const client = getDbClient();
     const db = client.db("cluster0");
+    const activitiesCollection = db.collection("activities");
 
     const activityId = req.query.activityId as string;
 
     // Verify activity exists and belongs to organization
-    const activity = await db.collection("activities").findOne({
-      _id: new ObjectId(activityId),
+    const activity = await activitiesCollection.findOne({
+      _id: activityId,
       orgId,
       ragEnabled: true
-    });
+    } as any);
 
     if (!activity) {
       return res.status(404).json({ message: "Activity not found or RAG not enabled" });

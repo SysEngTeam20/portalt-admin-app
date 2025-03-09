@@ -1,8 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuth } from "@clerk/nextjs/server";
-import { ObjectId } from "mongodb";
-import clientPromise from "@/lib/mongodb";
+import { getDbClient } from "@/lib/db";
 import { getSignedUrl } from "@/lib/cos";
+
+interface Document {
+  _id: string;
+  orgId: string;
+  url: string;
+}
 
 export default async function handler(
   req: NextApiRequest,
@@ -19,14 +24,14 @@ export default async function handler(
     if (!orgId) return res.status(401).json({ message: "Unauthorized" });
 
     const documentId = req.query.documentId as string;
-    const client = await clientPromise;
+    const client = getDbClient();
     const db = client.db("cluster0");
 
     // Verify document exists and belongs to organization
-    const document = await db.collection("documents").findOne({
-      _id: new ObjectId(documentId),
-      orgId,
-    });
+    const document = await db.collection<Document>("documents").findOne({
+      _id: documentId,
+      orgId
+    } as any);
 
     if (!document) {
       return res.status(404).json({ message: "Document not found" });

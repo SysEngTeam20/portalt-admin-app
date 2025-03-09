@@ -1,16 +1,14 @@
 // app/api/assets/[assetId]/access/route.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuth } from "@clerk/nextjs/server";
-import { ObjectId } from "mongodb";
-import clientPromise from "@/lib/mongodb";
+import { getDbClient, Relations } from "@/lib/db";
+import { v4 as uuidv4 } from 'uuid';
 import { getSignedUrl } from "@/lib/cos";
 
-function toObjectId(id: string) {
-  try {
-    return new ObjectId(id);
-  } catch (error) {
-    return null;
-  }
+interface Document {
+  _id: string;  // Uses string IDs instead of ObjectId
+  orgId: string;
+  url: string;
 }
 
 export default async function handler(
@@ -28,35 +26,33 @@ export default async function handler(
     if (!orgId) return res.status(401).json({ message: "Unauthorized" });
 
     const assetId = req.query.assetId as string;
-    const objectId = toObjectId(assetId);
     
-    if (!objectId) {
-      return res.status(400).json({ message: "Invalid asset ID" });
-    }
-    
-    const client = await clientPromise;
+    const client = getDbClient();
     const db = client.db("cluster0");
 
     // Try finding in assets collection first
     let item = await db.collection("assets").findOne({
-      _id: objectId,
+      _id: assetId,
       orgId
-    });
+    } as any);
 
     // If not found in assets, try documents collection
     if (!item) {
-      item = await db.collection("documents").findOne({
-        _id: objectId,
+      const documents = db.collection<Document>("documents");
+      const doc = await documents.findOne({ 
+        _id: assetId,
         orgId
-      });
-    }
+      } as any);
 
-    if (!item) {
-      return res.status(404).json({ message: "Asset not found" });
+      if (!doc) {
+        return res.status(404).json({ message: "Asset not found" });
+      }
+
+      item = doc;
     }
 
     // Generate short-lived signed URL (15 minutes)
-    const signedUrl = await getSignedUrl(item.url, 900);
+    const signedUrl = await getSignedUrl((item as { url: string }).url, 900);
 
     return res.status(200).json({ url: signedUrl });
   } catch (error) {

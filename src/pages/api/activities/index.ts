@@ -1,6 +1,30 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuth } from "@clerk/nextjs/server";
-import clientPromise from "@/lib/mongodb";
+import { getDbClient } from "@/lib/db";
+import { v4 as uuidv4 } from 'uuid';
+import { z } from 'zod';
+
+interface ActivityDocument {
+  _id: string;
+  title: string;
+  bannerUrl: string;
+  platform: string;
+  format: string;
+  orgId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const ActivitySchema = z.object({
+  _id: z.string().uuid(),
+  title: z.string().min(1),
+  bannerUrl: z.string().url().or(z.literal("")),
+  platform: z.enum(["headset", "web"]),
+  format: z.enum(["AR", "VR"]),
+  orgId: z.string().min(1),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
 
 export default async function handler(
   req: NextApiRequest,
@@ -12,18 +36,14 @@ export default async function handler(
     return res.status(401).json({ message: "Unauthorized" });
   }
 
-  // Handle GET request
+  const client = getDbClient();
+  const db = client.db("cluster0");
+  const activitiesCollection = db.collection<ActivityDocument>("activities");
+
+  // GET all activities
   if (req.method === 'GET') {
     try {
-      const client = await clientPromise;
-      const db = client.db("cluster0");
-      
-      const activities = await db
-        .collection("activities")
-        .find({ orgId })
-        .sort({ createdAt: -1 })
-        .toArray();
-
+      const activities = await activitiesCollection.find({ orgId });
       return res.status(200).json(activities);
     } catch (error) {
       console.error("[ACTIVITIES_GET]", error);
@@ -31,7 +51,7 @@ export default async function handler(
     }
   } 
   
-  // Handle POST request
+  // POST create new activity
   else if (req.method === 'POST') {
     try {
       const { title, bannerUrl, platform, format } = req.body;
@@ -48,25 +68,25 @@ export default async function handler(
         return res.status(400).json({ message: "Valid platform (headset/web) is required" });
       }
 
-      const client = await clientPromise;
-      const db = client.db("cluster0");
-      
-      const activity = {
+      const newActivity = {
+        _id: uuidv4(),
         title,
         bannerUrl: bannerUrl || "",
-        platform: platform,
-        format: format,
+        platform,
+        format,
         orgId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       };
 
-      const result = await db.collection("activities").insertOne(activity);
+      const parseResult = ActivitySchema.safeParse(newActivity);
+      if (!parseResult.success) {
+        return res.status(400).json({ errors: parseResult.error.format() });
+      }
 
-      return res.status(200).json({ 
-        ...activity, 
-        _id: result.insertedId 
-      });
+      await activitiesCollection.insertOne(newActivity);
+
+      return res.status(200).json(newActivity);
     } catch (error) {
       console.error("[ACTIVITIES_POST]", error);
       return res.status(500).json({ message: "Internal Error" });

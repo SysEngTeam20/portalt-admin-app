@@ -1,21 +1,21 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuth } from "@clerk/nextjs/server";
-import { ObjectId } from "mongodb";
-import clientPromise from "@/lib/mongodb";
+import { getDbClient, Relations } from "@/lib/db";
+import { v4 as uuidv4 } from 'uuid';
 
 interface Scene {
   id: string;
   order: number;
   elements: any[];
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
-interface Activity {
-  _id: ObjectId;
+interface ActivityDocument {
+  _id: string;
   orgId: string;
-  scenes: Scene[];
-  updatedAt: Date;
+  scenes?: Scene[];
+  updatedAt: string;
 }
 
 export default async function handler(
@@ -30,17 +30,22 @@ export default async function handler(
     }
 
     const activityId = req.query.activityId as string;
-    const client = await clientPromise;
+    const client = getDbClient();
     const db = client.db("cluster0");
-    
+    const activitiesCollection = db.collection("activities");
+
     // GET all scenes for an activity
     if (req.method === 'GET') {
-      const activity = await db.collection("activities").findOne({
-        _id: new ObjectId(activityId),
+      const activity = await activitiesCollection.findOne({
+        _id: activityId,
         orgId
-      });
+      } as any) as unknown as { scenes?: Scene[] };
 
       if (!activity) {
+        return res.status(404).json({ message: "Activity not found" });
+      }
+
+      if (!activity?.scenes) {
         return res.status(404).json({ message: "Activity not found" });
       }
 
@@ -49,11 +54,10 @@ export default async function handler(
     
     // POST create new scene
     else if (req.method === 'POST') {
-      // First get the activity to check ownership and get current scenes count
-      const activity = await db.collection<Activity>("activities").findOne({
-        _id: new ObjectId(activityId),
+      const activity = await activitiesCollection.findOne({
+        _id: activityId,
         orgId
-      });
+      } as any) as unknown as ActivityDocument;
 
       if (!activity) {
         return res.status(404).json({ message: "Activity not found" });
@@ -61,20 +65,28 @@ export default async function handler(
 
       const currentScenes = activity.scenes || [];
       const newScene = {
-        id: new ObjectId().toString(),
+        id: uuidv4(),
         order: currentScenes.length + 1,
         elements: [],
-        createdAt: new Date(),
-        updatedAt: new Date()
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       };
 
-      await db.collection<Activity>("activities").updateOne(
-        { _id: new ObjectId(activityId) },
+      const updatedScenes = [...currentScenes, newScene];
+
+      const result = await activitiesCollection.updateOne(
+        { _id: activityId },
         { 
-          $push: { scenes: { $each: [newScene] } },
-          $set: { updatedAt: new Date() }
+          $set: { 
+            scenes: updatedScenes,
+            updatedAt: new Date().toISOString() 
+          } as any
         }
       );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).json({ message: "Activity not found" });
+      }
 
       return res.status(200).json(newScene);
     }
@@ -87,16 +99,19 @@ export default async function handler(
         return res.status(400).json({ message: "Invalid scenes data" });
       }
 
-      const result = await db.collection("activities").updateOne(
+      const result = await activitiesCollection.updateOne(
         {
-          _id: new ObjectId(activityId),
+          _id: activityId,
           orgId
-        },
+        } as any,  // Type assertion here
         {
           $set: {
-            scenes,
-            updatedAt: new Date()
-          }
+            scenes: scenes.map(s => ({
+              ...s,
+              updatedAt: new Date().toISOString()
+            })),
+            updatedAt: new Date().toISOString()
+          } as any
         }
       );
 

@@ -1,8 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuth } from "@clerk/nextjs/server";
-import { ObjectId } from "mongodb";
-import clientPromise from "@/lib/mongodb";
-import { uploadDocument, deleteDocument } from "@/lib/cos";
+import { v4 as uuidv4 } from 'uuid';
+import { getDbClient, Relations } from "@/lib/db";
+import { uploadDocument } from "@/lib/cos";
 import formidable from 'formidable';
 import fs from 'fs';
 
@@ -36,19 +36,22 @@ export default async function handler(
     if (req.method === 'GET') {
       const activityId = req.query.activityId as string | undefined;
 
-      const client = await clientPromise;
+      const client = getDbClient();
       const db = client.db("cluster0");
+      const documentsCollection = db.collection("documents");
 
-      const query = {
-        orgId,
-        ...(activityId && { activityIds: activityId }),
-      };
-
-      const documents = await db
-        .collection("documents")
-        .find(query)
-        .sort({ createdAt: -1 })
-        .toArray();
+      let documents;
+      
+      if (activityId) {
+        // Get documents associated with the activity
+        const documentIds = Relations.getDocumentsByActivityId(activityId);
+        documents = documentIds.map(id => 
+          documentsCollection.findOne({ _id: id, orgId } as any)
+        ).filter(Boolean);
+      } else {
+        // Get all organization's documents
+        documents = documentsCollection.find({ orgId } as any);
+      }
 
       return res.status(200).json(documents);
     }
@@ -89,19 +92,19 @@ export default async function handler(
 
       console.log('File uploaded to COS:', cosKey);
 
-      const client = await clientPromise;
+      const client = getDbClient();
       const db = client.db("cluster0");
 
       // Create document metadata
       const document = {
-        _id: new ObjectId(),
+        _id: uuidv4(),
         filename: file.originalFilename || 'unnamed-file',
         originalName: file.originalFilename || 'unnamed-file',
         mimeType: file.mimetype || 'application/octet-stream',
         size: fs.statSync(file.filepath).size,
         url: cosKey,
         orgId,
-        activityIds: activityId ? [activityId] : [],
+        activityIds: [] as string[],
         metadata: {},
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -109,12 +112,42 @@ export default async function handler(
 
       await db.collection("documents").insertOne(document);
 
-      // If activityId provided, update activity's documentIds
+      // If activityId provided, link the document to the activity
       if (activityId) {
-        await db.collection("activities").updateOne(
-          { _id: new ObjectId(activityId), orgId },
-          { $addToSet: { documentIds: document._id.toString() } }
+        // Update the document's activityIds array
+        document.activityIds.push(activityId);
+        await db.collection("documents").updateOne(
+          { _id: document._id },
+          { $set: { activityIds: document.activityIds } as any }
         );
+        
+        // Create the relation in the join table
+        await Relations.linkDocumentToActivity(document._id, activityId);
+        
+        // Update the activity's documentIds array
+        const activitiesCollection = db.collection("activities");
+        interface ActivityDocument {
+          _id: string;
+          orgId: string;
+          documentIds?: string[];
+        }
+        
+        const activity = activitiesCollection.findOne({ 
+          _id: activityId, 
+          orgId 
+        } as any) as unknown as ActivityDocument;
+        
+        if (activity) {
+          if (!activity.documentIds) {
+            activity.documentIds = [];
+          }
+          activity.documentIds.push(document._id);
+          
+          await activitiesCollection.updateOne(
+            { _id: activityId },
+            { $set: { documentIds: activity.documentIds } as any }
+          );
+        }
       }
 
       // Clean up the temp file

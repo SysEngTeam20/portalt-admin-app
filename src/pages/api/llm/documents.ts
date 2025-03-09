@@ -1,17 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { ObjectId } from "mongodb";
-import clientPromise from "@/lib/mongodb";
+import { getDbClient } from "@/lib/db";
 import { verifyLLMToken } from "@/lib/tokens";
 import { getSignedUrl } from "@/lib/cos";
 
 interface Activity {
-  _id: ObjectId;
+  _id: string;
   orgId: string;
   ragEnabled: boolean;
 }
 
 interface Document {
-  _id: ObjectId;
+  _id: string;
   url: string;
   filename: string;
   metadata: any;
@@ -42,14 +41,14 @@ export default async function handler(
       return res.status(401).json({ message: "Invalid token" });
     }
 
-    const client = await clientPromise;
+    const client = getDbClient();
     const db = client.db("cluster0");
 
     // Get the activity and verify RAG is enabled
     const activity = await db.collection<Activity>("activities").findOne({
-      _id: new ObjectId(payload.activityId as string),
+      _id: payload.activityId,
       ragEnabled: true
-    });
+    } as any);
 
     if (!activity) {
       return res.status(404).json({ message: "Activity not found or RAG not enabled" });
@@ -58,21 +57,17 @@ export default async function handler(
     // Get all documents associated with this activity
     const documents = await db.collection<Document>("documents")
       .find({
-        activityIds: payload.activityId as string
-      })
-      .toArray();
+        activityIds: payload.activityId
+      } as any);
 
     // Generate short-lived signed URLs for each document
     const documentsWithUrls = await Promise.all(
-      documents.map(async (doc) => {
-        const signedUrl = await getSignedUrl(doc.url, 900); // 15 minutes expiry
-        return {
-          id: doc._id,
-          name: doc.filename,
-          url: signedUrl,
-          metadata: doc.metadata
-        };
-      })
+      documents.map(async (doc) => ({
+        id: doc._id,
+        name: doc.filename,
+        url: await getSignedUrl(doc.url, 900), // 15 minutes expiry
+        metadata: doc.metadata
+      }))
     );
 
     return res.status(200).json(documentsWithUrls);

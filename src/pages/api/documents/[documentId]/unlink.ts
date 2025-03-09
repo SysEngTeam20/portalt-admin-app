@@ -1,15 +1,15 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuth } from "@clerk/nextjs/server";
-import { ObjectId, Document } from "mongodb";
-import clientPromise from "@/lib/mongodb";
+import { getDbClient, Relations } from "@/lib/db";
 
 interface Activity {
-  _id: ObjectId;
+  _id: string;
   orgId: string;
   documentIds: string[];
 }
 
-interface DocumentType extends Document {
+interface DocumentType {
+  _id: string;
   activityIds: string[];
   orgId: string;
 }
@@ -35,20 +35,11 @@ export default async function handler(
       return res.status(400).json({ message: "Activity ID is required" });
     }
 
-    const client = await clientPromise;
+    const client = getDbClient();
     const db = client.db("cluster0");
 
-    // Remove activityId from document
-    await db.collection<DocumentType>("documents").updateOne(
-      { _id: new ObjectId(documentId), orgId },
-      { $pull: { activityIds: activityId } }
-    );
-
-    // Remove documentId from activity
-    await db.collection<Activity>("activities").updateOne(
-      { _id: new ObjectId(activityId), orgId },
-      { $pull: { documentIds: documentId } }
-    );
+    // Use Relations class to handle unlinking
+    await Relations.unlinkDocumentFromActivity(documentId, activityId);
 
     return res.status(200).json({ message: "ok" });
   } catch (error) {

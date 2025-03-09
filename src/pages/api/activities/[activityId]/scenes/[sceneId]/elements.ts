@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuth } from "@clerk/nextjs/server";
-import { ObjectId } from "mongodb";
-import clientPromise from "@/lib/mongodb";
+import { getDbClient } from "@/lib/db";
+import { v4 as uuidv4 } from 'uuid';
 
 interface Element {
   id: string;
@@ -12,14 +12,14 @@ interface Element {
 interface Scene {
   id: string;
   elements: Element[];
-  updatedAt: Date;
+  updatedAt: string;
 }
 
 interface Activity {
-  _id: ObjectId;
+  _id: string;
   orgId: string;
   scenes: Scene[];
-  updatedAt: Date;
+  updatedAt: string;
 }
 
 export default async function handler(
@@ -35,25 +35,27 @@ export default async function handler(
 
     const activityId = req.query.activityId as string;
     const sceneId = req.query.sceneId as string;
-    const client = await clientPromise;
+    const client = getDbClient();
     const db = client.db("cluster0");
+    const activitiesCollection = db.collection<Activity>("activities");
 
     // GET all elements for a scene
     if (req.method === 'GET') {
-      const activity = await db.collection("activities").findOne(
-        {
-          _id: new ObjectId(activityId),
-          orgId,
-          "scenes.id": sceneId
-        },
-        { projection: { "scenes.$": 1 } }
-      );
+      const activity = await activitiesCollection.findOne({
+        _id: activityId,
+        orgId
+      });
 
-      if (!activity || !activity.scenes?.[0]) {
+      if (!activity || !activity.scenes) {
         return res.status(404).json({ message: "Scene not found" });
       }
 
-      return res.status(200).json(activity.scenes[0].elements || []);
+      const scene = activity.scenes.find((s: any) => s.id === sceneId);
+      if (!scene) {
+        return res.status(404).json({ message: "Scene not found" });
+      }
+
+      return res.status(200).json(scene.elements || []);
     }
     
     // POST create new element
@@ -65,24 +67,32 @@ export default async function handler(
       }
 
       const newElement = {
-        id: new ObjectId().toString(),
+        id: uuidv4(),
         type,
         properties: properties || {}
       };
 
-      const result = await db.collection<Activity>("activities").updateOne(
-        {
-          _id: new ObjectId(activityId),
-          orgId,
-          "scenes.id": sceneId
-        },
-        {
-          $push: { "scenes.$.elements": { $each: [newElement] } },
-          $set: { 
-            updatedAt: new Date(),
-            "scenes.$.updatedAt": new Date()
-          }
-        }
+      const activity = await activitiesCollection.findOne({
+        _id: activityId,
+        orgId
+      });
+
+      if (!activity) {
+        return res.status(404).json({ message: "Activity not found" });
+      }
+
+      const sceneIndex = activity.scenes.findIndex((s: any) => s.id === sceneId);
+      if (sceneIndex === -1) {
+        return res.status(404).json({ message: "Scene not found" });
+      }
+
+      activity.scenes[sceneIndex].elements.push(newElement);
+      activity.updatedAt = new Date().toISOString();
+      activity.scenes[sceneIndex].updatedAt = new Date().toISOString();
+
+      const result = await activitiesCollection.updateOne(
+        { _id: activityId },
+        { $set: activity }
       );
 
       if (result.matchedCount === 0) {
@@ -100,19 +110,27 @@ export default async function handler(
         return res.status(400).json({ message: "Invalid elements data" });
       }
 
-      const result = await db.collection("activities").updateOne(
-        {
-          _id: new ObjectId(activityId),
-          orgId,
-          "scenes.id": sceneId
-        },
-        {
-          $set: { 
-            "scenes.$.elements": elements,
-            updatedAt: new Date(),
-            "scenes.$.updatedAt": new Date()
-          }
-        }
+      const activity = await activitiesCollection.findOne({
+        _id: activityId,
+        orgId
+      });
+
+      if (!activity) {
+        return res.status(404).json({ message: "Activity not found" });
+      }
+
+      const sceneIndex = activity.scenes.findIndex((s: any) => s.id === sceneId);
+      if (sceneIndex === -1) {
+        return res.status(404).json({ message: "Scene not found" });
+      }
+
+      activity.scenes[sceneIndex].elements = elements;
+      activity.updatedAt = new Date().toISOString();
+      activity.scenes[sceneIndex].updatedAt = new Date().toISOString();
+
+      const result = await activitiesCollection.updateOne(
+        { _id: activityId },
+        { $set: activity }
       );
 
       if (result.matchedCount === 0) {

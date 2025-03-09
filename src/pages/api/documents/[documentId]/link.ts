@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuth } from "@clerk/nextjs/server";
-import { ObjectId } from "mongodb";
-import clientPromise from "@/lib/mongodb";
+import { getDbClient, Relations } from "@/lib/db";
+import { v4 as uuidv4 } from 'uuid';
 
 export default async function handler(
   req: NextApiRequest,
@@ -24,20 +24,16 @@ export default async function handler(
       return res.status(400).json({ message: "Activity ID is required" });
     }
 
-    const client = await clientPromise;
+    const client = await getDbClient();
     const db = client.db("cluster0");
 
-    // Update document with new activityId
-    await db.collection("documents").updateOne(
-      { _id: new ObjectId(documentId), orgId },
+    const documentsCollection = db.collection("documents");
+    await documentsCollection.updateOne(
+      { _id: documentId },
       { $addToSet: { activityIds: activityId } }
     );
 
-    // Update activity with new documentId
-    await db.collection("activities").updateOne(
-      { _id: new ObjectId(activityId), orgId },
-      { $addToSet: { documentIds: documentId } }
-    );
+    await Relations.linkDocumentToActivity(documentId, activityId);
 
     return res.status(200).json({ message: "ok" });
   } catch (error) {

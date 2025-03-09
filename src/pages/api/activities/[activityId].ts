@@ -1,7 +1,20 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuth } from "@clerk/nextjs/server";
-import { ObjectId } from "mongodb";
-import clientPromise from "@/lib/mongodb";
+import { getDbClient } from "@/lib/db";
+import { v4 as uuidv4 } from 'uuid';
+
+interface ActivityDocument {
+  _id: string;
+  title: string;
+  description?: string;
+  bannerUrl: string;
+  format: string;
+  platform: string;
+  ragEnabled?: boolean;
+  orgId: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export default async function handler(
   req: NextApiRequest,
@@ -15,15 +28,19 @@ export default async function handler(
     }
 
     const activityId = req.query.activityId as string;
-    const client = await clientPromise;
+    const client = getDbClient();
     const db = client.db("cluster0");
-    
+    const activitiesCollection = db.collection<ActivityDocument>("activities");
+
     // GET single activity
     if (req.method === 'GET') {
-      const activity = await db.collection("activities").findOne({
-        _id: new ObjectId(activityId),
+      const activity = await activitiesCollection.findOne({
+        _id: activityId,
         orgId
       });
+      
+      console.log('Query params:', { activityId, orgId });
+      console.log('Raw query:', { _id: activityId, orgId });
 
       if (!activity) {
         return res.status(404).json({ message: "Activity not found" });
@@ -55,11 +72,8 @@ export default async function handler(
         return res.status(400).json({ message: "Invalid platform" });
       }
 
-      await db.collection("activities").findOneAndUpdate(
-        {
-          _id: new ObjectId(activityId),
-          orgId
-        },
+      const result = await activitiesCollection.updateOne(
+        { _id: activityId, orgId },
         {
           $set: {
             title,
@@ -68,19 +82,22 @@ export default async function handler(
             format,
             platform,
             ragEnabled,
-            updatedAt: new Date()
+            updatedAt: new Date().toISOString()
           }
-        },
-        { returnDocument: 'after' }
+        }
       );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).json({ message: "Activity not found" });
+      }
 
       return res.status(200).json({ message: "ok" });
     }
     
     // DELETE activity
     else if (req.method === 'DELETE') {
-      const result = await db.collection("activities").deleteOne({
-        _id: new ObjectId(activityId),
+      const result = await activitiesCollection.deleteOne({
+        _id: activityId,
         orgId
       });
 
