@@ -18,7 +18,6 @@ export default async function handler(
   const collection = client.db("cluster0").collection<{
     _id?: string;
     scene_id: string;
-    environment?: any;
     objects?: any[];
     orgId?: string;
     createdAt: Date;
@@ -33,7 +32,6 @@ export default async function handler(
           // Create neutral config without orgId
           const newConfig = {
             scene_id: sceneId,
-            environment: { modelUrl: "" },
             objects: [],
             createdAt: new Date(),
             updatedAt: new Date()

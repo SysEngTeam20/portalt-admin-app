@@ -298,10 +298,6 @@ export interface SceneConfiguration {
   _id?: string;
   activity_id: string;
   scene_id: string;
-  environment?: {
-    modelUrl: string;
-    thumbnailUrl?: string;
-  };
   objects: {
     object_id: string;
     modelUrl: string;

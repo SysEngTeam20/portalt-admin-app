@@ -18,7 +18,6 @@ interface Scene {
 interface SceneConfiguration {
   _id?: string;
   scene_id: string;
-  environment: any;
   objects: any[];
   orgId: string;
   createdAt: Date;
@@ -52,7 +51,6 @@ export default async function handler(
       const result = await scenesCollection.insertOne(newScene);
       await sceneConfigCollection.insertOne({
         scene_id: result.insertedId.toString(),
-        environment: { modelUrl: "" },
         objects: [],
         orgId,
         createdAt: new Date(),

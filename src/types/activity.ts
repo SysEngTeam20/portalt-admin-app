@@ -38,9 +38,6 @@ export interface Activity {
   createdAt: Date;
   updatedAt: Date;
   scene: {
-    environment: {
-      modelUrl: string;
-    };
     objects: Array<{
       object_id: string;
       modelUrl: string;

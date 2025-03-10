@@ -82,7 +82,6 @@ export default async function handler(
           name: "Main Scene",
           order: 1,
           config: {
-            environment: { modelUrl: "" },
             objects: []
           }
         }]

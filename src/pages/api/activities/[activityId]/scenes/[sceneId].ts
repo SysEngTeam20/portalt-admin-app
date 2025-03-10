@@ -4,7 +4,6 @@ import { getAuth } from "@clerk/nextjs/server";
 import { NextApiRequest, NextApiResponse } from "next";
 
 interface PublicSceneResponse {
-  environment?: string;
   objects: Array<{
     model: string;
     position: Vector3;

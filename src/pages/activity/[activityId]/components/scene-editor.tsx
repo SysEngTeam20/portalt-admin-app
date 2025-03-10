@@ -24,9 +24,6 @@ interface Scene {
 
 interface SceneConfiguration {
   scene_id: string;
-  environment: {
-    modelUrl?: string;
-  };
   objects: Array<{
     object_id: string;
     modelUrl: string;
@@ -143,26 +140,6 @@ export function SceneEditor({ activity }: SceneEditorProps) {
     setDraggedScene(null);
   };
 
-  const handleEnvironmentUpdate = async (sceneId: string, modelUrl: string) => {
-    try {
-      await fetch(`/api/scenes-configuration/${sceneId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          environment: { modelUrl },
-          objects: sceneConfigs[sceneId]?.objects || []
-        })
-      });
-      
-      setSceneConfigs(prev => ({
-        ...prev,
-        [sceneId]: { ...prev[sceneId], environment: { modelUrl } }
-      }));
-    } catch (error) {
-      console.error("Environment update failed:", error);
-    }
-  };
-
   const handleAddArtifact = async (sceneId: string, artifact: any) => {
     try {
       // Create new object with position data
@@ -176,7 +153,6 @@ export function SceneEditor({ activity }: SceneEditorProps) {
 
       // Get current config or initialize empty
       const currentConfig = sceneConfigs[sceneId] || { 
-        environment: {}, 
         objects: [] 
       };
 
@@ -185,7 +161,6 @@ export function SceneEditor({ activity }: SceneEditorProps) {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          environment: currentConfig.environment,
           objects: [...currentConfig.objects, newObject]
         })
       });
@@ -228,8 +203,7 @@ export function SceneEditor({ activity }: SceneEditorProps) {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          environment: sceneConfigs[sceneId]?.environment || {},
-          objects: filteredObjects  // Use filtered array here
+          objects: filteredObjects
         })
       });
 
@@ -255,7 +229,6 @@ export function SceneEditor({ activity }: SceneEditorProps) {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          environment: sceneConfigs[sceneId]?.environment || {},
           objects: updatedObjects
         })
       });
@@ -395,62 +368,17 @@ export function SceneEditor({ activity }: SceneEditorProps) {
   return (
     <div className="space-y-6">
       {selectedScene && (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Environment Configuration</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <EnvironmentConfig 
-                modelUrl={sceneConfigs[selectedScene]?.environment.modelUrl}
-                onUpdate={handleEnvironmentUpdate}
-                sceneId={selectedScene}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>3D Artifacts</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <SceneArtifactsCard
-                artifacts={sceneConfigs[selectedScene]?.objects}
-                onAddArtifact={handleAddArtifact}
-                onUpdateArtifact={handleUpdateArtifact}
-                onRemoveArtifact={handleRemoveArtifact}
-                sceneId={selectedScene}
-              />
-            </CardContent>
-          </Card>
-        </>
+        <SceneArtifactsCard
+          artifacts={sceneConfigs[selectedScene]?.objects}
+          onAddArtifact={handleAddArtifact}
+          onUpdateArtifact={handleUpdateArtifact}
+          onRemoveArtifact={handleRemoveArtifact}
+          sceneId={selectedScene}
+        />
       )}
     </div>
   );
 }
-
-// New helper components
-const EnvironmentConfig = ({ 
-  modelUrl,
-  onUpdate,
-  sceneId
-}: { 
-  modelUrl: string | undefined;
-  onUpdate: (sceneId: string, modelUrl: string) => Promise<void>;
-  sceneId: string;
-}) => (
-  <Card className="p-4">
-    <h3 className="font-semibold mb-4">Environment Configuration</h3>
-    <FileUpload 
-      onUpload={async (file) => {
-        const url = await uploadFileToStorage(file);
-        onUpdate(sceneId, url);
-      }}
-      accept=".glb,.gltf"
-      label="Upload 3D Environment"
-    />
-  </Card>
-);
 
 const SceneArtifactsCard = ({ 
   artifacts,
