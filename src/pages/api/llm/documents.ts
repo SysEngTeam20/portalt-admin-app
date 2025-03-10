@@ -46,9 +46,9 @@ export default async function handler(
 
     // Get the activity and verify RAG is enabled
     const activity = await db.collection<Activity>("activities").findOne({
-      _id: payload.activityId,
+      _id: payload.activityId.toString(),
       ragEnabled: true
-    } as any);
+    });
 
     if (!activity) {
       return res.status(404).json({ message: "Activity not found or RAG not enabled" });

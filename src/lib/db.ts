@@ -69,7 +69,11 @@ export class Collection<T extends { _id?: string }> {
         ${conditions ? `WHERE ${conditions}` : ''}
       `);
       
-      const values = Object.values(query);
+      const values = Object.values(query).map(v => {
+        if (typeof v === 'boolean') return v ? 1 : 0;
+        if (v instanceof Date) return v.toISOString();
+        return v;
+      });
       const row = stmt.get(...values) as { data: string } | undefined;
       
       if (!row) return null;
