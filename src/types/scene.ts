@@ -3,6 +3,9 @@ export interface SceneConfiguration {
   activity_id: string;
   scene_id: string;
   objects: SceneObject[];
+  orgId: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface SceneObject {

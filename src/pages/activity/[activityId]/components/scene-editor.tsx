@@ -22,20 +22,6 @@ interface Scene {
   elements: any[];
 }
 
-interface SceneConfiguration {
-  scene_id: string;
-  objects: Array<{
-    object_id: string;
-    modelUrl: string;
-    position: { x: number; y: number; z: number };
-    rotation: { x: number; y: number; z: number };
-    scale: { x: number; y: number; z: number };
-  }>;
-  orgId: string;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
 interface SceneEditorProps {
   activity: Activity;
 }

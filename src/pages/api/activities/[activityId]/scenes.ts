@@ -2,7 +2,6 @@ import { getDbClient } from "@/lib/db";
 import { getAuth } from "@clerk/nextjs/server";
 import { NextApiRequest, NextApiResponse } from "next";
 
-// Add Scene interface
 interface Scene {
   _id?: string;
   activity_id: string;
@@ -14,7 +13,6 @@ interface Scene {
   updatedAt: Date;
 }
 
-// Add SceneConfiguration interface
 interface SceneConfiguration {
   _id?: string;
   scene_id: string;

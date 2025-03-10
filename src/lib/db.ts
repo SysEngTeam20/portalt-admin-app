@@ -306,5 +306,3 @@ export interface SceneConfiguration {
     scale: { x: number; y: number; z: number };
   }[];
 }
-
-// Add to Relations class if needed 
