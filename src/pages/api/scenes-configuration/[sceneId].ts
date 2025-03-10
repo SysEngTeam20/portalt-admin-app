@@ -9,7 +9,10 @@ export default async function handler(
   const { orgId } = getAuth(req);
   const sceneId = req.query.sceneId as string;
 
-  if (!orgId) return res.status(401).json({ message: "Unauthorized" });
+  // Skip auth check for GET requests
+  if (req.method !== 'GET' && !orgId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
 
   const client = getDbClient();
   const collection = client.db("cluster0").collection<{
@@ -17,7 +20,7 @@ export default async function handler(
     scene_id: string;
     environment?: any;
     objects?: any[];
-    orgId: string;
+    orgId?: string;
     createdAt: Date;
     updatedAt: Date;
   }>("scenes_configuration");
@@ -27,12 +30,11 @@ export default async function handler(
       case 'GET':
         const config = await collection.findOne({ scene_id: sceneId });
         if (!config) {
-          // Create default config if missing
+          // Create neutral config without orgId
           const newConfig = {
             scene_id: sceneId,
             environment: { modelUrl: "" },
             objects: [],
-            orgId,
             createdAt: new Date(),
             updatedAt: new Date()
           };
