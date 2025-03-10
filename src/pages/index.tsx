@@ -54,20 +54,20 @@ export default function HomePage() {
             key={activity._id} 
             href={`/activity/${activity._id}`}
           >
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="p-0">
+            <Card className="hover:shadow-lg transition-shadow h-64">
+              <CardContent className="p-0 h-[calc(100%-56px)]">
                 {activity.bannerUrl && (
-                  <div className="relative w-full h-48">
+                  <div className="relative w-full h-full">
                     <img
                       src={activity.bannerUrl}
                       alt={activity.title}
-                      className="object-cover rounded-t-lg fill-current"
+                      className="object-cover rounded-t-lg w-full h-full"
                     />
                   </div>
                 )}
               </CardContent>
-              <CardFooter className="p-4">
-                <h2 className="text-xl font-semibold">{activity.title}</h2>
+              <CardFooter className="p-4 h-14">
+                <h2 className="text-xl font-semibold truncate">{activity.title}</h2>
               </CardFooter>
             </Card>
           </Link>
