@@ -43,6 +43,14 @@ interface SceneEditorProps {
   activity: Activity;
 }
 
+interface ArtifactObject {
+  object_id: string;
+  modelUrl: string;
+  position: { x: number; y: number; z: number };
+  rotation: { x: number; y: number; z: number };
+  scale: { x: number; y: number; z: number };
+}
+
 export function SceneEditor({ activity }: SceneEditorProps) {
   const [scenes, setScenes] = useState<Scene[]>([]);
   const { activityId } = useParams() as { activityId: string };
@@ -385,141 +393,58 @@ export function SceneEditor({ activity }: SceneEditorProps) {
   }
 
   return (
-    <div className="flex gap-6">
-      {/* Scene Sequence */}
-      <Card className="w-64 bg-white border-gray-200 p-4 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Scenes Sequence</h2>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-gray-600"
-            onClick={handleAddScene}
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
-
-        <div className="space-y-2">
-          {scenes.map((scene) => (
-            <div
-              key={scene.id}
-              draggable
-              onDragStart={() => handleDragStart(scene)}
-              onDragOver={handleDragOver}
-              onDrop={() => handleDrop(scene)}
-              className={`
-                p-3 rounded-lg border transition-colors cursor-move
-                ${draggedScene?.id === scene.id ? 'opacity-50' : 'opacity-100'}
-                ${selectedScene === scene.id ? 'border-blue-500 bg-gray-100' : 'border-gray-200 bg-gray-50'}
-                hover:border-gray-300
-              `}
-              onClick={() => setSelectedScene(scene.id)}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-500 w-4">
-                    {scene.order}
-                  </span>
-                  <SceneNameEditor 
-                    name={scene.name}
-                    onSave={async (newName) => {
-                      try {
-                        await handleUpdateSceneName(scene.id, newName);
-                      } catch (error) {
-                        console.error("Failed to update scene name:", error);
-                      }
-                    }}
-                  />
-                </div>
-                <div className="flex gap-1">
-                  <Button 
-                    size="sm" 
-                    variant="ghost" 
-                    className="h-6 w-6 p-0 text-red-500"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSceneToDelete(scene.id);
-                    }}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* Updated Scene Editor */}
-      <Card className="flex-1 bg-white border-gray-200 p-6 shadow-sm">
-        {selectedScene ? (
-          <>
-            <div className="grid grid-cols-1 gap-6">
-              {/* Environment Configuration */}
-              <EnvironmentCard 
+    <div className="space-y-6">
+      {selectedScene && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Environment Configuration</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <EnvironmentConfig 
+                modelUrl={sceneConfigs[selectedScene]?.environment.modelUrl}
+                onUpdate={handleEnvironmentUpdate}
                 sceneId={selectedScene}
-                config={sceneConfigs[selectedScene]}
-                onEnvironmentUpdate={handleEnvironmentUpdate}
               />
+            </CardContent>
+          </Card>
 
-              {/* Artifacts Management */}
-              <SceneArtifactsCard 
-                sceneId={selectedScene}
-                config={sceneConfigs[selectedScene]}
+          <Card>
+            <CardHeader>
+              <CardTitle>3D Artifacts</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SceneArtifactsCard
+                artifacts={sceneConfigs[selectedScene]?.objects}
                 onAddArtifact={handleAddArtifact}
                 onUpdateArtifact={handleUpdateArtifact}
                 onRemoveArtifact={handleRemoveArtifact}
-                onFileUpload={handleFileUpload}
+                sceneId={selectedScene}
               />
-            </div>
-          </>
-        ) : (
-          <div className="h-full flex items-center justify-center">
-            <p className="text-gray-500">Select a scene to view or edit</p>
-          </div>
-        )}
-      </Card>
-
-      {/* Confirmation Modal */}
-      <Dialog open={!!sceneToDelete} onOpenChange={(open) => !open && setSceneToDelete(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Scene?</DialogTitle>
-          </DialogHeader>
-          <div className="text-sm text-gray-600">
-            This action cannot be undone. All scene configuration will be permanently removed.
-          </div>
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setSceneToDelete(null)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteScene}>
-              Delete
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }
 
 // New helper components
-const EnvironmentCard = ({ 
-  sceneId, 
-  config,
-  onEnvironmentUpdate 
+const EnvironmentConfig = ({ 
+  modelUrl,
+  onUpdate,
+  sceneId
 }: { 
+  modelUrl: string | undefined;
+  onUpdate: (sceneId: string, modelUrl: string) => Promise<void>;
   sceneId: string;
-  config: any;
-  onEnvironmentUpdate: (sceneId: string, modelUrl: string) => Promise<void>;
 }) => (
   <Card className="p-4">
     <h3 className="font-semibold mb-4">Environment Configuration</h3>
     <FileUpload 
       onUpload={async (file) => {
         const url = await uploadFileToStorage(file);
-        onEnvironmentUpdate(sceneId, url);
+        onUpdate(sceneId, url);
       }}
       accept=".glb,.gltf"
       label="Upload 3D Environment"
@@ -528,19 +453,17 @@ const EnvironmentCard = ({
 );
 
 const SceneArtifactsCard = ({ 
-  sceneId, 
-  config,
+  artifacts,
   onAddArtifact,
   onUpdateArtifact,
   onRemoveArtifact,
-  onFileUpload
+  sceneId
 }: { 
-  sceneId: string;
-  config?: SceneConfiguration;
+  artifacts: ArtifactObject[] | undefined;
   onAddArtifact: (sceneId: string, artifact: any) => Promise<void>;
   onUpdateArtifact: (sceneId: string, objectId: string, updated: any) => Promise<void>;
   onRemoveArtifact: (sceneId: string, objectId: string) => Promise<void>;
-  onFileUpload: (file: File) => Promise<void>;
+  sceneId: string;
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedTab, setSelectedTab] = useState<'upload' | 'library'>('upload');
@@ -593,14 +516,14 @@ const SceneArtifactsCard = ({
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-4">
-          {config?.objects?.length === 0 ? (
+          {artifacts?.length === 0 ? (
             <div className="col-span-2 text-center p-8 text-muted-foreground">
               <PackageOpen className="h-8 w-8 mx-auto mb-2" />
               <p>No 3D artifacts added yet</p>
               <p className="text-sm mt-1">Add artifacts using the button above</p>
             </div>
           ) : (
-            config?.objects?.map((obj) => (
+            artifacts?.map((obj) => (
               <ArtifactItem
                 key={obj.object_id}
                 object={obj}

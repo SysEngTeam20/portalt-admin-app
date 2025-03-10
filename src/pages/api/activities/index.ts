@@ -76,7 +76,16 @@ export default async function handler(
         format,
         orgId,
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        scenes: [{
+          id: crypto.randomUUID(),
+          name: "Main Scene",
+          order: 1,
+          config: {
+            environment: { modelUrl: "" },
+            objects: []
+          }
+        }]
       };
 
       const parseResult = ActivitySchema.safeParse(newActivity);

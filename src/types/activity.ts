@@ -1,3 +1,5 @@
+import { Vector3 } from "./scene";
+
 // types/activity.ts
 export type ActivityFormat = "AR" | "VR";
 export type ActivityPlatform = "headset" | "web";
@@ -35,4 +37,16 @@ export interface Activity {
   documentIds: string[];
   createdAt: Date;
   updatedAt: Date;
+  scene: {
+    environment: {
+      modelUrl: string;
+    };
+    objects: Array<{
+      object_id: string;
+      modelUrl: string;
+      position: Vector3;
+      rotation: Vector3;
+      scale: Vector3;
+    }>;
+  };
 }
