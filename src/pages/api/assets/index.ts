@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuth } from "@clerk/nextjs/server";
 import { getDbClient } from "@/lib/db";
 import { v4 as uuidv4 } from 'uuid';
-import { uploadDocument } from "@/lib/cos";
+import { uploadDocument, getPublicUrl } from "@/lib/cos";
 import { documentToAsset } from "@/types/asset";
 import * as formidable from 'formidable';
 import fs from 'fs';
@@ -127,9 +127,11 @@ export default async function handler(
 
       await db.collection<AssetDocument>("assets").insertOne(newAsset);
       
+      const publicUrl = await getPublicUrl(cosUrl.split('/').pop() || '');
       return res.status(201).json({
-        ...newAsset,
-        modelUrl: newAsset.url
+        url: publicUrl,
+        fileName: file.originalFilename,
+        fileType: file.mimetype
       });
     }
 

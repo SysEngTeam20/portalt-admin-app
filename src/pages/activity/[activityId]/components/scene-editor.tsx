@@ -315,7 +315,11 @@ export function SceneEditor({ activity }: SceneEditorProps) {
       if (!assetResponse.ok) throw new Error('Asset upload failed');
       const { url } = await assetResponse.json();
 
-      // Step 2: Add to scene config
+      // Verify URL format before saving
+      if (!url.startsWith('https://') || !url.includes('.cloud-object-storage')) {
+        throw new Error('Invalid model URL format');
+      }
+      
       await handleAddArtifact(selectedScene!, { modelUrl: url });
       setShowAddModal(false);
 
@@ -557,7 +561,11 @@ const SceneArtifactsCard = ({
       if (!assetResponse.ok) throw new Error('Asset upload failed');
       const { url } = await assetResponse.json();
 
-      // Step 2: Add to scene config
+      // Verify URL format before saving
+      if (!url.startsWith('https://') || !url.includes('.cloud-object-storage.appdomain.cloud')) {
+        throw new Error('Invalid model URL format');
+      }
+      
       await onAddArtifact(sceneId, { modelUrl: url });
       setShowAddModal(false);
 

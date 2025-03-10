@@ -112,3 +112,9 @@ export async function deleteDocument(key: string): Promise<void> {
     Key: key,
   }).promise();
 }
+
+export async function getPublicUrl(key: string): Promise<string> {
+  // Add the correct path prefix that matches your upload location
+  const fullKey = `documents/${key}`; // Matches upload path in uploadDocument()
+  return `https://${process.env.COS_BUCKET_NAME}.s3.${process.env.IBM_CLOUD_REGION}.cloud-object-storage.appdomain.cloud/${fullKey}`;
+}

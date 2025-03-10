@@ -3,7 +3,7 @@ export interface SceneConfiguration {
   activity_id: string;
   scene_id: string;
   environment?: {
-    modelUrl: string;
+    modelUrl?: string;
     thumbnailUrl?: string;
   };
   objects: SceneObject[];
@@ -21,4 +21,9 @@ export interface Vector3 {
   x: number;
   y: number;
   z: number;
+}
+
+export function isValidCOSUrl(url: string): boolean {
+  const pattern = /^https:\/\/[a-z0-9-]+\.s3\.[a-z0-9-]+\.cloud-object-storage\.appdomain\.cloud\/.+/;
+  return pattern.test(url);
 } 
