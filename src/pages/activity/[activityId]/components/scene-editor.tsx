@@ -191,6 +191,14 @@ export function SceneEditor({ activity }: SceneEditorProps) {
         [sceneId]: updatedConfig
       }));
 
+      // Force refresh by re-fetching scene config
+      const refreshResponse = await fetch(`/api/scenes-configuration/${sceneId}`);
+      const freshConfig = await refreshResponse.json();
+      setSceneConfigs(prev => ({
+        ...prev,
+        [sceneId]: freshConfig
+      }));
+
     } catch (error) {
       console.error("Artifact addition failed:", error);
       throw error; // Propagate error to handleFileUpload
@@ -377,7 +385,7 @@ export function SceneEditor({ activity }: SceneEditorProps) {
       {/* Scene Sequence */}
       <Card className="w-64 bg-white border-gray-200 p-4 shadow-sm">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Scene Sequence</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Scenes Sequence</h2>
           <Button
             size="sm"
             variant="ghost"
@@ -405,23 +413,22 @@ export function SceneEditor({ activity }: SceneEditorProps) {
               onClick={() => setSelectedScene(scene.id)}
             >
               <div className="flex items-center justify-between">
-                <SceneNameEditor 
-                  name={scene.name}
-                  onSave={async (newName) => {
-                    try {
-                      await handleUpdateSceneName(scene.id, newName);
-                    } catch (error) {
-                      console.error("Failed to update scene name:", error);
-                    }
-                  }}
-                />
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500 w-4">
+                    {scene.order}
+                  </span>
+                  <SceneNameEditor 
+                    name={scene.name}
+                    onSave={async (newName) => {
+                      try {
+                        await handleUpdateSceneName(scene.id, newName);
+                      } catch (error) {
+                        console.error("Failed to update scene name:", error);
+                      }
+                    }}
+                  />
+                </div>
                 <div className="flex gap-1">
-                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
-                    <Eye className="h-3 w-3 text-gray-500" />
-                  </Button>
-                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
-                    <Edit3 className="h-3 w-3 text-gray-500" />
-                  </Button>
                   <Button 
                     size="sm" 
                     variant="ghost" 
