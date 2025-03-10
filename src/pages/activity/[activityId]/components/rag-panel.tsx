@@ -204,9 +204,9 @@ export function RagPanel({ activity }: RagPanelProps) {
         {/* RAG Enable Switch - unchanged */}
         <div className="flex items-center justify-between p-4 rounded-lg border">
           <div className="space-y-1">
-            <h3 className="text-lg font-medium">Enable RAG on activity</h3>
+            <h3 className="text-lg font-medium">Enable AI Guide in activity</h3>
             <p className="text-sm text-gray-500">
-              Enable participants to interact with your documents via a chatbot.
+              Enable participants to interact with an AI guide to answer their questions through the activity.
             </p>
           </div>
           <Switch
@@ -219,7 +219,7 @@ export function RagPanel({ activity }: RagPanelProps) {
         <div className="space-y-4">
           {/* Header - unchanged */}
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-medium">Source Documents</h3>
+            <h3 className="text-lg font-medium">Knowledge Base</h3>
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" size="sm">

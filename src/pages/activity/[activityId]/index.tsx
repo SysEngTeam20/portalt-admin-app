@@ -75,7 +75,7 @@ export default function ActivityPage() {
               value="rag"
               className="text-gray-600 data-[state=active]:bg-white data-[state=active]:text-gray-900"
             >
-              RAG
+              AI Guide
             </TabsTrigger>
             <TabsTrigger 
               value="settings"
