@@ -7,6 +7,53 @@ export class Collection<T extends { _id?: string }> {
   
   constructor(tableName: string) {
     this.tableName = tableName;
+    this.ensureTableExists();
+    this.ensureIndexes();
+  }
+  
+  private ensureTableExists() {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS ${this.tableName} (
+          id TEXT PRIMARY KEY,
+          data TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      `);
+    } catch (error) {
+      console.error(`Table creation failed for ${this.tableName}:`, error);
+    }
+  }
+  
+  private ensureIndexes() {
+    try {
+      // Create basic indexes for common query patterns
+      if (this.tableName === 'scenes') {
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_scenes_activity 
+          ON ${this.tableName}(json_extract(data, '$.activity_id'));
+          
+          CREATE INDEX IF NOT EXISTS idx_scenes_org 
+          ON ${this.tableName}(json_extract(data, '$.orgId'));
+        `);
+      }
+
+      if (this.tableName === 'scenes_configuration') {
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_scene_config 
+          ON ${this.tableName}(json_extract(data, '$.scene_id'));
+        `);
+      }
+
+      // General purpose indexes
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_${this.tableName}_updated 
+        ON ${this.tableName}(updated_at);
+      `);
+    } catch (error) {
+      console.error(`Index creation failed for ${this.tableName}:`, error);
+    }
   }
   
   // Find a single document by query
@@ -240,4 +287,24 @@ export function getDbClient() {
       };
     }
   };
-} 
+}
+
+// Add new collection type for scene configurations
+export interface SceneConfiguration {
+  _id?: string;
+  activity_id: string;
+  scene_id: string;
+  environment?: {
+    modelUrl: string;
+    thumbnailUrl?: string;
+  };
+  objects: {
+    object_id: string;
+    modelUrl: string;
+    position: { x: number; y: number; z: number };
+    rotation: { x: number; y: number; z: number };
+    scale: { x: number; y: number; z: number };
+  }[];
+}
+
+// Add to Relations class if needed 

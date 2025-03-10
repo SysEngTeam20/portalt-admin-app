@@ -1,134 +1,90 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import { getDbClient } from "@/lib/db";
 import { getAuth } from "@clerk/nextjs/server";
-import { getDbClient, Relations } from "@/lib/db";
-import { v4 as uuidv4 } from 'uuid';
+import { NextApiRequest, NextApiResponse } from "next";
 
+// Add Scene interface
 interface Scene {
-  id: string;
+  _id?: string;
+  activity_id: string;
+  orgId: string;
+  name: string;
   order: number;
   elements: any[];
-  createdAt: string;
-  updatedAt: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-interface ActivityDocument {
-  _id: string;
+// Add SceneConfiguration interface
+interface SceneConfiguration {
+  _id?: string;
+  scene_id: string;
+  environment: any;
+  objects: any[];
   orgId: string;
-  scenes?: Scene[];
-  updatedAt: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  const { activityId } = req.query;
+  const { orgId } = getAuth(req);
+
+  if (!orgId) return res.status(401).json({ message: "Unauthorized" });
+
+  const client = getDbClient();
+  const db = client.db("cluster0");
+  const scenesCollection = db.collection<Scene>("scenes");
+  const sceneConfigCollection = db.collection<SceneConfiguration>("scenes_configuration");
+
   try {
-    const { orgId } = getAuth(req);
-    
-    if (!orgId) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const activityId = req.query.activityId as string;
-    const client = getDbClient();
-    const db = client.db("cluster0");
-    const activitiesCollection = db.collection("activities");
-
-    // GET all scenes for an activity
-    if (req.method === 'GET') {
-      const activity = await activitiesCollection.findOne({
-        _id: activityId,
-        orgId
-      } as any) as unknown as { scenes?: Scene[] };
-
-      if (!activity) {
-        return res.status(404).json({ message: "Activity not found" });
-      }
-
-      if (!activity?.scenes) {
-        return res.status(404).json({ message: "Activity not found" });
-      }
-
-      return res.status(200).json(activity.scenes || []);
-    }
-    
-    // POST create new scene
-    else if (req.method === 'POST') {
-      const activity = await activitiesCollection.findOne({
-        _id: activityId,
-        orgId
-      } as any) as unknown as ActivityDocument;
-
-      if (!activity) {
-        return res.status(404).json({ message: "Activity not found" });
-      }
-
-      const currentScenes = activity.scenes || [];
+    if (req.method === 'POST') {
       const newScene = {
-        id: uuidv4(),
-        order: currentScenes.length + 1,
-        elements: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        ...req.body,
+        activity_id: activityId,
+        orgId,
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
 
-      const updatedScenes = [...currentScenes, newScene];
-
-      const result = await activitiesCollection.updateOne(
-        { _id: activityId },
-        { 
-          $set: { 
-            scenes: updatedScenes,
-            updatedAt: new Date().toISOString() 
-          } as any
-        }
-      );
-
-      if (result.matchedCount === 0) {
-        return res.status(404).json({ message: "Activity not found" });
-      }
-
-      return res.status(200).json(newScene);
+      const result = await scenesCollection.insertOne(newScene);
+      await sceneConfigCollection.insertOne({
+        scene_id: result.insertedId.toString(),
+        environment: { modelUrl: "" },
+        objects: [],
+        orgId,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      return res.status(201).json({
+        ...newScene,
+        _id: result.insertedId,
+        id: result.insertedId.toString()
+      });
     }
-    
-    // PUT update scene order
-    else if (req.method === 'PUT') {
-      const { scenes } = req.body;
 
-      if (!Array.isArray(scenes)) {
-        return res.status(400).json({ message: "Invalid scenes data" });
-      }
+    if (req.method === 'GET') {
+      const activityId = Array.isArray(req.query.activityId) 
+        ? req.query.activityId[0] 
+        : req.query.activityId;
 
-      const result = await activitiesCollection.updateOne(
-        {
-          _id: activityId,
-          orgId
-        } as any,  // Type assertion here
-        {
-          $set: {
-            scenes: scenes.map(s => ({
-              ...s,
-              updatedAt: new Date().toISOString()
-            })),
-            updatedAt: new Date().toISOString()
-          } as any
-        }
-      );
-
-      if (result.matchedCount === 0) {
-        return res.status(404).json({ message: "Activity not found" });
-      }
-
-      return res.status(200).json(scenes);
+      const scenes = await scenesCollection.find({
+        activity_id: activityId,
+        orgId
+      });
+      
+      return res.status(200).json(scenes.map(s => ({
+        ...s,
+        id: s._id?.toString() || '',
+        _id: undefined
+      })));
     }
-    
-    // Handle unsupported methods
-    else {
-      res.setHeader('Allow', ['GET', 'POST', 'PUT']);
-      return res.status(405).json({ message: `Method ${req.method} Not Allowed` });
-    }
+
+    return res.status(405).json({ message: "Method not allowed" });
   } catch (error) {
     console.error("[SCENES_API]", error);
-    return res.status(500).json({ message: "Internal Error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 }

@@ -45,6 +45,22 @@ interface Document {
   updatedAt: string;
 }
 
+// Add this helper function
+const getAssetType = (filename: string): AssetDocument['type'] => {
+  const extension = filename.split('.').pop()?.toLowerCase();
+  
+  if (['glb', 'gltf', 'fbx', 'obj', 'dae', '3ds', 'blend', 'stl', 'skp', 'dxf'].includes(extension!)) {
+    return '3D Objects';
+  }
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension!)) {
+    return 'Images';
+  }
+  if (['pdf', 'doc', 'docx', 'txt', 'md'].includes(extension!)) {
+    return 'RAG Documents';
+  }
+  return '3D Objects'; // default fallback
+};
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -101,7 +117,7 @@ export default async function handler(
       const newAsset: AssetDocument = {
         _id: uuidv4(),
         name: fields.name?.[0] || file.originalFilename || 'Unnamed Asset',
-        type: (fields.type?.[0] || '3D Objects') as AssetDocument['type'],
+        type: getAssetType(file.originalFilename || 'unnamed'), // Use auto-detected type
         size: file.size,
         url: cosUrl,
         orgId,
@@ -111,7 +127,10 @@ export default async function handler(
 
       await db.collection<AssetDocument>("assets").insertOne(newAsset);
       
-      return res.status(200).json(newAsset);
+      return res.status(201).json({
+        ...newAsset,
+        modelUrl: newAsset.url
+      });
     }
 
     res.setHeader('Allow', ['GET', 'POST']);

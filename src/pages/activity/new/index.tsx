@@ -55,7 +55,6 @@ export default function CreateActivityPage() {
       });
 
       router.push(`/activity/${activity._id}`);
-      router.refresh();
     } catch (error) {
       console.error('Error creating activity:', error);
       toast({
@@ -120,10 +119,10 @@ export default function CreateActivityPage() {
                 className="flex gap-4"
                 required
               >
-                <div className="flex items-center space-x-2">
+                {/* <div className="flex items-center space-x-2">
                   <RadioGroupItem value="AR" id="ar" />
                   <Label htmlFor="ar">AR</Label>
-                </div>
+                </div> */}
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="VR" id="vr" />
                   <Label htmlFor="vr">VR</Label>
@@ -143,10 +142,10 @@ export default function CreateActivityPage() {
                   <RadioGroupItem value="headset" id="headset" />
                   <Label htmlFor="headset">Headset</Label>
                 </div>
-                <div className="flex items-center space-x-2">
+                {/* <div className="flex items-center space-x-2">
                   <RadioGroupItem value="web" id="web" />
                   <Label htmlFor="web">Web</Label>
-                </div>
+                </div> */}
               </RadioGroup>
             </div>
 
