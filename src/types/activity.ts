@@ -37,13 +37,18 @@ export interface Activity {
   documentIds: string[];
   createdAt: Date;
   updatedAt: Date;
-  scene: {
-    objects: Array<{
-      object_id: string;
-      modelUrl: string;
-      position: Vector3;
-      rotation: Vector3;
-      scale: Vector3;
-    }>;
-  };
+  scenes: Array<{
+    id: string;
+    name: string;
+    order: number;
+    config: {
+      objects: Array<{
+        object_id: string;
+        modelUrl: string;
+        position: Vector3;
+        rotation: Vector3;
+        scale: Vector3;
+      }>;
+    };
+  }>;
 }

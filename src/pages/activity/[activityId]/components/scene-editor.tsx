@@ -35,31 +35,27 @@ interface ArtifactObject {
 }
 
 export function SceneEditor({ activity }: SceneEditorProps) {
-  const [scenes, setScenes] = useState<Scene[]>([]);
   const { activityId } = useParams() as { activityId: string };
   const [selectedScene, setSelectedScene] = useState<string | null>(null);
-  const [draggedScene, setDraggedScene] = useState<Scene | null>(null);
   const [sceneConfigs, setSceneConfigs] = useState<Record<string, any>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [sceneToDelete, setSceneToDelete] = useState<string | null>(null);
   const [isAddingArtifact, setIsAddingArtifact] = useState(false);
 
-  // Fetch scenes from API
+  // Initialize scene for VR activities
   useEffect(() => {
-    const fetchScenes = async () => {
-      try {
-        const response = await fetch(`/api/activities/${activityId}/scenes`);
-        if (!response.ok) throw new Error('Failed to fetch');
-        const data = await response.json();
-        setScenes(Array.isArray(data) ? data : []);
-      } catch (error) {
-        console.error("Failed to fetch scenes:", error);
-        setScenes([]);
-      }
-    };
-    fetchScenes();
-  }, [activityId]);
+    if (activity.format === 'VR' && activity.scenes?.[0]) {
+      console.log("[SCENE_EDITOR] Setting initial scene for VR:", activity);
+      setSelectedScene(activity.scenes[0].id);
+      
+      // Set initial scene config
+      setSceneConfigs(prev => ({
+        ...prev,
+        [activity.scenes[0].id]: activity.scenes[0].config
+      }));
+    }
+  }, [activity]);
 
   // Fetch scene configuration when scene is selected
   useEffect(() => {
@@ -81,51 +77,6 @@ export function SceneEditor({ activity }: SceneEditorProps) {
     }
   }, [selectedScene]);
 
-  const handleDragStart = (scene: Scene) => {
-    setDraggedScene(scene);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (targetScene: Scene) => {
-    if (!draggedScene || draggedScene.id === targetScene.id) return;
-
-    const updatedScenes = [...scenes];
-    const draggedIndex = scenes.findIndex(s => s.id === draggedScene.id);
-    const targetIndex = scenes.findIndex(s => s.id === targetScene.id);
-
-    // Remove dragged scene from array
-    const [removed] = updatedScenes.splice(draggedIndex, 1);
-    // Insert it at the target position
-    updatedScenes.splice(targetIndex, 0, removed);
-
-    // Update order numbers
-    const reorderedScenes = updatedScenes.map((scene, index) => ({
-      ...scene,
-      order: index + 1,
-    }));
-
-    // Optimistic UI update
-    setScenes(reorderedScenes);
-
-    // Persist to backend
-    fetch(`/api/activities/${activityId}/scenes/order`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sceneIds: reorderedScenes.map(s => s.id)
-      })
-    }).catch(error => {
-      console.error("Order update failed:", error);
-      // Rollback on error
-      setScenes(scenes);
-    });
-
-    setDraggedScene(null);
-  };
-
   const handleAddArtifact = async (sceneId: string, artifact: any) => {
     try {
       // Create new object with position data
@@ -142,6 +93,12 @@ export function SceneEditor({ activity }: SceneEditorProps) {
         objects: [] 
       };
 
+      console.log("[SCENE_EDITOR] Adding artifact to scene:", {
+        sceneId,
+        currentConfig,
+        newObject
+      });
+
       // Update scene config via API
       const response = await fetch(`/api/scenes-configuration/${sceneId}`, {
         method: 'PUT',
@@ -151,35 +108,34 @@ export function SceneEditor({ activity }: SceneEditorProps) {
         })
       });
 
-      if (!response.ok) throw new Error('Failed to update scene');
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("[SCENE_EDITOR] API error:", errorData);
+        throw new Error(`Failed to update scene: ${errorData.message || response.statusText}`);
+      }
 
       // Update local state with API response
       const updatedConfig = await response.json();
+      console.log("[SCENE_EDITOR] Updated config:", updatedConfig);
+      
       setSceneConfigs(prev => ({
         ...prev,
         [sceneId]: updatedConfig
       }));
 
-      // Force refresh by re-fetching scene config
-      const refreshResponse = await fetch(`/api/scenes-configuration/${sceneId}`);
-      const freshConfig = await refreshResponse.json();
-      setSceneConfigs(prev => ({
-        ...prev,
-        [sceneId]: freshConfig
-      }));
-
     } catch (error) {
-      console.error("Artifact addition failed:", error);
-      throw error; // Propagate error to handleFileUpload
+      console.error("[SCENE_EDITOR] Artifact addition failed:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to add artifact to scene",
+        variant: "destructive",
+      });
+      throw error;
     }
   };
 
   const handleRemoveArtifact = async (sceneId: string, objectId: string) => {
     try {
-      const updatedObjects = sceneConfigs[sceneId]?.objects?.filter(
-        (obj: { object_id: string }) => obj.object_id === objectId
-      ) || [];
-
       // Properly filter OUT the deleted object
       const filteredObjects = sceneConfigs[sceneId]?.objects?.filter(
         (obj: { object_id: string }) => obj.object_id !== objectId
@@ -231,103 +187,31 @@ export function SceneEditor({ activity }: SceneEditorProps) {
     }
   };
 
-  const handleAddScene = async () => {
-    try {
-      const response = await fetch(`/api/activities/${activityId}/scenes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: 'New Scene',
-          order: scenes.length + 1,
-          elements: []
-        })
-      });
-
-      if (response.ok) {
-        const newScene = await response.json();
-        setScenes(prev => [...prev, newScene]);
-      }
-    } catch (error) {
-      console.error("Scene creation failed:", error);
+  // For VR activities, show the scene artifacts card directly
+  if (activity.format === 'VR') {
+    // Only show loading state if we haven't initialized the scene yet
+    if (!selectedScene && !sceneConfigs[activity.scenes?.[0]?.id]) {
+      return (
+        <div className="flex items-center justify-center p-8">
+          <p className="text-muted-foreground">Loading scene...</p>
+        </div>
+      );
     }
-  };
 
-  const handleUpdateSceneName = async (sceneId: string, newName: string) => {
-    try {
-      await fetch(`/api/activities/${activityId}/scenes/${sceneId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName })
-      });
-      
-      setScenes(prev => prev.map(scene => 
-        scene.id === sceneId ? { ...scene, name: newName } : scene
-      ));
-    } catch (error) {
-      console.error("Scene rename failed:", error);
-    }
-  };
+    return (
+      <div className="space-y-6">
+        <SceneArtifactsCard
+          artifacts={sceneConfigs[selectedScene || activity.scenes?.[0]?.id]?.objects}
+          onAddArtifact={handleAddArtifact}
+          onUpdateArtifact={handleUpdateArtifact}
+          onRemoveArtifact={handleRemoveArtifact}
+          sceneId={selectedScene || activity.scenes?.[0]?.id}
+        />
+      </div>
+    );
+  }
 
-  const handleFileUpload = async (file: File) => {
-    setIsAddingArtifact(true);
-    try {
-      // Step 1: Upload to assets
-      const assetFormData = new FormData();
-      assetFormData.append('file', file);
-      const assetResponse = await fetch('/api/assets', {
-        method: 'POST',
-        body: assetFormData
-      });
-      
-      if (!assetResponse.ok) throw new Error('Asset upload failed');
-      const { url } = await assetResponse.json();
-
-      // Verify URL format before saving
-      if (!url.startsWith('https://') || !url.includes('.cloud-object-storage')) {
-        throw new Error('Invalid model URL format');
-      }
-      
-      await handleAddArtifact(selectedScene!, { modelUrl: url });
-      setShowAddModal(false);
-
-    } catch (error) {
-      console.error("Upload failed:", error);
-      toast({
-        title: "Upload Error",
-        description: "Failed to add artifact to scene",
-        variant: "destructive",
-      });
-    } finally {
-      setIsAddingArtifact(false);
-    }
-  };
-
-  const handleDeleteScene = async () => {
-    if (!sceneToDelete) return;
-    
-    try {
-      const response = await fetch(`/api/activities/${activityId}/scenes/${sceneToDelete}`, {
-        method: 'DELETE'
-      });
-
-      if (response.ok) {
-        setScenes(prev => prev.filter(s => s.id !== sceneToDelete));
-        if (selectedScene === sceneToDelete) setSelectedScene(null);
-        setSceneToDelete(null);
-        toast({
-          title: "Success",
-          description: "Scene deleted successfully",
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to delete scene",
-        variant: "destructive",
-      });
-    }
-  };
-
+  // AR format handling
   if (activity.format === 'AR') {
     return (
       <Card className="bg-white border-gray-200 p-6 shadow-sm">
@@ -351,19 +235,7 @@ export function SceneEditor({ activity }: SceneEditorProps) {
     );
   }
 
-  return (
-    <div className="space-y-6">
-      {selectedScene && (
-        <SceneArtifactsCard
-          artifacts={sceneConfigs[selectedScene]?.objects}
-          onAddArtifact={handleAddArtifact}
-          onUpdateArtifact={handleUpdateArtifact}
-          onRemoveArtifact={handleRemoveArtifact}
-          sceneId={selectedScene}
-        />
-      )}
-    </div>
-  );
+  return null;
 }
 
 const SceneArtifactsCard = ({ 
@@ -399,7 +271,7 @@ const SceneArtifactsCard = ({
       const { url } = await assetResponse.json();
 
       // Verify URL format before saving
-      if (!url.startsWith('https://') || !url.includes('.cloud-object-storage.appdomain.cloud')) {
+      if (!url.startsWith('https://') || !url.includes('.cloud-object-storage')) {
         throw new Error('Invalid model URL format');
       }
       
