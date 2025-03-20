@@ -27,10 +27,6 @@ export default async function handler(
   res: NextApiResponse
 ) {
   const { activityId } = req.query;
-  const { orgId } = getAuth(req);
-
-  if (!orgId) return res.status(401).json({ message: "Unauthorized" });
-
   const client = getDbClient();
   const db = client.db("cluster0");
   const scenesCollection = db.collection<Scene>("scenes");
@@ -38,6 +34,12 @@ export default async function handler(
 
   try {
     if (req.method === 'POST') {
+      const { orgId } = getAuth(req);
+      
+      if (!orgId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
       const newScene = {
         ...req.body,
         activity_id: activityId,
@@ -62,6 +64,12 @@ export default async function handler(
     }
 
     if (req.method === 'GET') {
+      const { orgId } = req.query;
+      
+      if (!orgId || typeof orgId !== 'string') {
+        return res.status(400).json({ message: "orgId query parameter is required" });
+      }
+
       const activityId = Array.isArray(req.query.activityId) 
         ? req.query.activityId[0] 
         : req.query.activityId;

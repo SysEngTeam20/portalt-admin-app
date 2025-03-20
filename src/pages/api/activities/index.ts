@@ -30,12 +30,6 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  const { orgId } = getAuth(req);
-    
-  if (!orgId) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-
   const client = getDbClient();
   const db = client.db("cluster0");
   const activitiesCollection = db.collection<ActivityDocument>("activities");
@@ -43,6 +37,12 @@ export default async function handler(
   // GET all activities
   if (req.method === 'GET') {
     try {
+      const { orgId } = req.query;
+      
+      if (!orgId || typeof orgId !== 'string') {
+        return res.status(400).json({ message: "orgId query parameter is required" });
+      }
+
       const activities = await activitiesCollection.find({ orgId });
       return res.status(200).json(activities);
     } catch (error) {
@@ -54,6 +54,12 @@ export default async function handler(
   // POST create new activity
   else if (req.method === 'POST') {
     try {
+      const { orgId } = getAuth(req);
+      
+      if (!orgId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
       const { title, bannerUrl, platform, format } = req.body;
 
       if (!title) {

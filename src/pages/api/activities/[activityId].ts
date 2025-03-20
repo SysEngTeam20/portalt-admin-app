@@ -21,12 +21,6 @@ export default async function handler(
   res: NextApiResponse
 ) {
   try {
-    const { orgId } = getAuth(req);
-    
-    if (!orgId) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
     const activityId = req.query.activityId as string;
     const client = getDbClient();
     const db = client.db("cluster0");
@@ -34,6 +28,12 @@ export default async function handler(
 
     // GET single activity
     if (req.method === 'GET') {
+      const { orgId } = req.query;
+      
+      if (!orgId || typeof orgId !== 'string') {
+        return res.status(400).json({ message: "orgId query parameter is required" });
+      }
+
       const activity = await activitiesCollection.findOne({
         _id: activityId,
         orgId
@@ -51,6 +51,12 @@ export default async function handler(
     
     // PATCH update activity
     else if (req.method === 'PATCH') {
+      const { orgId } = getAuth(req);
+      
+      if (!orgId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
       const {
         title,
         description,
@@ -96,6 +102,12 @@ export default async function handler(
     
     // DELETE activity
     else if (req.method === 'DELETE') {
+      const { orgId } = getAuth(req);
+      
+      if (!orgId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
       const result = await activitiesCollection.deleteOne({
         _id: activityId,
         orgId

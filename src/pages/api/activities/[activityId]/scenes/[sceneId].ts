@@ -28,10 +28,6 @@ export default async function handler(
   res: NextApiResponse
 ) {
   const { activityId, sceneId } = req.query;
-  const { orgId } = getAuth(req);
-
-  if (!orgId) return res.status(401).json({ message: "Unauthorized" });
-
   const client = getDbClient();
   const scenesCollection = client.db("cluster0").collection<Scene>("scenes");
 
@@ -45,24 +41,45 @@ export default async function handler(
       : req.query.sceneId;
 
     switch (req.method) {
-      case 'GET':
+      case 'GET': {
+        const { orgId } = req.query;
+        
+        if (!orgId || typeof orgId !== 'string') {
+          return res.status(400).json({ message: "orgId query parameter is required" });
+        }
+
         const scene = await scenesCollection.findOne({ 
           _id: sceneId,
           activity_id: activityId,
           orgId
         });
         return res.status(scene ? 200 : 404).json(scene || { message: "Not found" });
+      }
 
-      case 'PUT':
+      case 'PUT': {
+        const { orgId } = getAuth(req);
+        
+        if (!orgId) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+
         await scenesCollection.updateOne(
-          { _id: sceneId },
+          { _id: sceneId, orgId },
           { $set: { ...req.body, updatedAt: new Date() } }
         );
         return res.status(200).json({ success: true });
+      }
 
-      case 'DELETE':
-        await scenesCollection.deleteOne({ _id: sceneId });
+      case 'DELETE': {
+        const { orgId } = getAuth(req);
+        
+        if (!orgId) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        await scenesCollection.deleteOne({ _id: sceneId, orgId });
         return res.status(204).end();
+      }
 
       default:
         return res.status(405).json({ message: "Method not allowed" });

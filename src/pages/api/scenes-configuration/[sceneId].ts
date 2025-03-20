@@ -6,14 +6,7 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  const { orgId } = getAuth(req);
   const sceneId = req.query.sceneId as string;
-
-  // Skip auth check for GET requests
-  if (req.method !== 'GET' && !orgId) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-
   const client = getDbClient();
   const collection = client.db("cluster0").collection<{
     _id?: string;
@@ -26,13 +19,20 @@ export default async function handler(
 
   try {
     switch (req.method) {
-      case 'GET':
-        const config = await collection.findOne({ scene_id: sceneId });
+      case 'GET': {
+        const { orgId } = req.query;
+        
+        if (!orgId || typeof orgId !== 'string') {
+          return res.status(400).json({ message: "orgId query parameter is required" });
+        }
+
+        const config = await collection.findOne({ scene_id: sceneId, orgId });
         if (!config) {
-          // Create neutral config without orgId
+          // Create neutral config with orgId
           const newConfig = {
             scene_id: sceneId,
             objects: [],
+            orgId,
             createdAt: new Date(),
             updatedAt: new Date()
           };
@@ -40,10 +40,17 @@ export default async function handler(
           return res.status(200).json(newConfig);
         }
         return res.status(200).json(config);
+      }
 
-      case 'PUT':
+      case 'PUT': {
+        const { orgId } = req.query;
+        
+        if (!orgId || typeof orgId !== 'string') {
+          return res.status(400).json({ message: "orgId query parameter is required" });
+        }
+
         console.log("[SCENE_CONFIG_API] PUT request body:", req.body);
-        const existing = await collection.findOne({ scene_id: sceneId });
+        const existing = await collection.findOne({ scene_id: sceneId, orgId });
         console.log("[SCENE_CONFIG_API] Existing config:", existing);
         
         if (!existing) {
@@ -65,12 +72,13 @@ export default async function handler(
           };
           console.log("[SCENE_CONFIG_API] Updating config:", updatedConfig);
           const result = await collection.updateOne(
-            { scene_id: sceneId },
+            { scene_id: sceneId, orgId },
             { $set: updatedConfig }
           );
           console.log("[SCENE_CONFIG_API] Update result:", result);
           return res.status(200).json(updatedConfig);
         }
+      }
 
       default:
         return res.status(405).json({ message: "Method not allowed" });
