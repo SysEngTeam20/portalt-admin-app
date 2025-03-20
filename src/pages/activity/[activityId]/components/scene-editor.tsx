@@ -93,6 +93,9 @@ export function SceneEditor({ activity }: SceneEditorProps) {
         objects: [] 
       };
 
+      // Ensure objects is an array
+      const currentObjects = Array.isArray(currentConfig.objects) ? currentConfig.objects : [];
+
       console.log("[SCENE_EDITOR] Adding artifact to scene:", {
         sceneId,
         currentConfig,
@@ -104,7 +107,7 @@ export function SceneEditor({ activity }: SceneEditorProps) {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          objects: [...currentConfig.objects, newObject]
+          objects: [...currentObjects, newObject]
         })
       });
 
