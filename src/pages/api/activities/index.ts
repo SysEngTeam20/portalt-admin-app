@@ -37,10 +37,21 @@ export default async function handler(
   // GET all activities
   if (req.method === 'GET') {
     try {
-      const { orgId } = req.query;
+      let orgId: string | undefined;
       
-      if (!orgId || typeof orgId !== 'string') {
-        return res.status(400).json({ message: "orgId query parameter is required" });
+      // First try to get orgId from query params
+      if (req.query.orgId && typeof req.query.orgId === 'string') {
+        orgId = req.query.orgId;
+      } else {
+        // Fall back to Clerk auth
+        const auth = getAuth(req);
+        if (auth.orgId) {
+          orgId = auth.orgId;
+        }
+      }
+
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required either as a query parameter or through authentication" });
       }
 
       const activities = await activitiesCollection.find({ orgId });
