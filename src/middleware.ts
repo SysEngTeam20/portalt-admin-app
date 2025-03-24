@@ -8,6 +8,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/llm/(.*)',
   '/api/scenes-configuration/(.*)',
   '/api/activities/(.*)',
+  '/api/activities',
   '/api/assets/(.*)'
 
 ])
