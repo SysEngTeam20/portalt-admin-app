@@ -37,20 +37,24 @@ export default async function handler(
   // GET all activities
   if (req.method === 'GET') {
     try {
+      console.log('Query parameters:', req.query)
       let orgId: string | undefined;
       
       // First try to get orgId from query params
       if (req.query.orgId && typeof req.query.orgId === 'string') {
         orgId = req.query.orgId;
+        console.log('Found orgId in query params:', orgId)
       } else {
         // Fall back to Clerk auth
         const auth = getAuth(req);
         if (auth.orgId) {
           orgId = auth.orgId;
+          console.log('Found orgId in auth:', orgId)
         }
       }
 
       if (!orgId) {
+        console.log('No orgId found in query params or auth')
         return res.status(400).json({ message: "orgId is required either as a query parameter or through authentication" });
       }
 

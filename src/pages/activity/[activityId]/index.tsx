@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Link } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SceneEditor } from './components/scene-editor';
 import { RagPanel } from './components/rag-panel';
 import { SettingsPanel } from './components/settings-panel';
+import { PairingModal } from './components/pairing-modal';
 import { Activity } from '@/types/activity';
 
 export default function ActivityPage() {
@@ -15,6 +16,7 @@ export default function ActivityPage() {
   const params = useParams();
   const [activity, setActivity] = useState<Activity | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPairingModalOpen, setIsPairingModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchActivity = async () => {
@@ -36,6 +38,11 @@ export default function ActivityPage() {
 
   if (isLoading) return <div>Loading...</div>;
   if (!activity) return <div>Activity not found</div>;
+  if (!params?.activityId) return <div>Invalid activity ID</div>;
+
+  const activityId = Array.isArray(params.activityId) 
+    ? params.activityId[0] 
+    : params.activityId;
 
   return (
     <div className="min-h-screen">
@@ -54,9 +61,16 @@ export default function ActivityPage() {
               </Button>
               <h1 className="text-2xl font-bold text-gray-900">{activity.title}</h1>
             </div>
-            {/* <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-              Launch
-            </Button> */}
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setIsPairingModalOpen(true)}
+                className="text-gray-600"
+              >
+                <Link className="h-4 w-4 mr-2" />
+                Pair Editor App
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -101,6 +115,12 @@ export default function ActivityPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <PairingModal 
+        isOpen={isPairingModalOpen}
+        onClose={() => setIsPairingModalOpen(false)}
+        activityId={activityId}
+      />
     </div>
   );
 }

@@ -7,14 +7,36 @@ const isPublicRoute = createRouteMatcher([
   '/view/(.*)',
   '/api/llm/(.*)',
   '/api/scenes-configuration/(.*)',
-  '/api/activities/(.*)',
-  '/api/activities',
-  '/api/assets/(.*)'
-
+  '/api/pairing/(.*)'
 ])
 
 export default clerkMiddleware(async (auth, req) => {
     const { userId, sessionClaims, redirectToSignIn } = await auth()
+
+    // Check for pairing code in API routes first
+    if (req.nextUrl.pathname.startsWith('/api/')) {
+      const url = new URL(req.url)
+      const pairingCode = url.searchParams.get('pairingCode')
+      
+      if (pairingCode) {
+        try {
+          console.log('Found pairing code:', pairingCode)
+          const response = await fetch(`${req.nextUrl.origin}/api/pairing/validate?code=${pairingCode}`)
+          if (response.ok) {
+            const { orgId } = await response.json()
+            console.log('Valid orgId from pairing:', orgId)
+            // Add orgId as a query parameter
+            url.searchParams.set('orgId', orgId)
+            console.log('Rewriting URL to:', url.toString())
+            return NextResponse.rewrite(url)
+          } else {
+            console.log('Pairing validation failed:', await response.text())
+          }
+        } catch (error) {
+          console.error('Error validating pairing code:', error)
+        }
+      }
+    }
 
     // User is on a public route
     if(isPublicRoute(req)){
