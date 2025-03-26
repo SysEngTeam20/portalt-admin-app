@@ -3,7 +3,7 @@ import { getAuth } from "@clerk/nextjs/server";
 import { v4 as uuidv4 } from 'uuid';
 import { getDbClient, Relations } from "@/lib/db";
 import { uploadDocument } from "@/lib/cos";
-import formidable from 'formidable';
+import { IncomingForm } from 'formidable';
 import fs from 'fs';
 
 // Disable the default body parser for this route since we're handling file uploads
@@ -15,8 +15,8 @@ export const config = {
 
 // Promisify formidable parsing
 const parseForm = (req: NextApiRequest) => {
-  return new Promise<{fields: formidable.Fields, files: formidable.Files}>((resolve, reject) => {
-    const form = new formidable.IncomingForm();
+  return new Promise<{fields: any, files: any}>((resolve, reject) => {
+    const form = new IncomingForm();
     form.parse(req, (err, fields, files) => {
       if (err) return reject(err);
       resolve({ fields, files });

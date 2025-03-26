@@ -170,10 +170,6 @@ export function SettingsPanel({ activity, onUpdate }: SettingsPanelProps) {
             required
           >
             <div className="flex items-center space-x-2">
-              <RadioGroupItem value="AR" id="ar" />
-              <Label htmlFor="ar">AR</Label>
-            </div>
-            <div className="flex items-center space-x-2">
               <RadioGroupItem value="VR" id="vr" />
               <Label htmlFor="vr">VR</Label>
             </div>
@@ -192,10 +188,6 @@ export function SettingsPanel({ activity, onUpdate }: SettingsPanelProps) {
             <div className="flex items-center space-x-2">
               <RadioGroupItem value="headset" id="headset" />
               <Label htmlFor="headset">Headset</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="web" id="web" />
-              <Label htmlFor="web">Web</Label>
             </div>
           </RadioGroup>
         </div>
