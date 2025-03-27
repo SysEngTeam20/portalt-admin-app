@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Link } from 'lucide-react';
+import { ArrowLeft, Link, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SceneEditor } from './components/scene-editor';
 import { RagPanel } from './components/rag-panel';
 import { SettingsPanel } from './components/settings-panel';
 import { PairingModal } from './components/pairing-modal';
+import { JoinCodeModal } from './components/join-code-modal';
 import { Activity } from '@/types/activity';
 
 export default function ActivityPage() {
@@ -17,6 +18,7 @@ export default function ActivityPage() {
   const [activity, setActivity] = useState<Activity | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPairingModalOpen, setIsPairingModalOpen] = useState(false);
+  const [isJoinCodeModalOpen, setIsJoinCodeModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchActivity = async () => {
@@ -62,6 +64,14 @@ export default function ActivityPage() {
               <h1 className="text-2xl font-bold text-gray-900">{activity.title}</h1>
             </div>
             <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setIsJoinCodeModalOpen(true)}
+                className="text-gray-600"
+              >
+                <Share2 className="h-4 w-4 mr-2" />
+                Join Activity
+              </Button>
               <Button 
                 variant="outline" 
                 onClick={() => setIsPairingModalOpen(true)}
@@ -119,6 +129,11 @@ export default function ActivityPage() {
       <PairingModal 
         isOpen={isPairingModalOpen}
         onClose={() => setIsPairingModalOpen(false)}
+        activityId={activityId}
+      />
+      <JoinCodeModal
+        isOpen={isJoinCodeModalOpen}
+        onClose={() => setIsJoinCodeModalOpen(false)}
         activityId={activityId}
       />
     </div>
