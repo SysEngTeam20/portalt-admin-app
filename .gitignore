@@ -19,10 +19,16 @@
 
 # production
 /build
+/dist
+/release
 
 # misc
 .DS_Store
 *.pem
+*.db
+*.sqlite
+*.sqlite3
+*.log
 
 # debug
 npm-debug.log*
@@ -30,8 +36,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -40,4 +47,23 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# data and database
 /data
+*.db
+SELECT
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
