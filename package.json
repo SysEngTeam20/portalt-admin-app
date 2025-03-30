@@ -13,7 +13,9 @@
     "pack-app": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
     "start": "electron .",
-    "lint": "next lint"
+    "lint": "next lint",
+    "vercel-build": "next build",
+    "vercel-start": "next start"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.9.6",
