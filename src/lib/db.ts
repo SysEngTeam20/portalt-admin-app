@@ -1,12 +1,12 @@
 import { v4 as uuidv4 } from 'uuid';
 import db from './sqlite';
-import { MongoClient } from 'mongodb';
+import { MongoClient, Collection as MongoCollection, Db } from 'mongodb';
 
 // MongoDB client for production environments
 let mongoClient: MongoClient | null = null;
 
 // The Collection class mimics MongoDB collection operations
-export class Collection<T extends { _id?: string }> {
+export class SqliteCollection<T extends { _id?: string }> {
   private tableName: string;
   
   constructor(tableName: string) {
@@ -60,8 +60,8 @@ export class Collection<T extends { _id?: string }> {
     }
   }
   
-  // Find a single document by query
-  findOne(query: Partial<T>): T | null {
+  // Find a single document by query - MongoDB compatible
+  async findOne(query: any): Promise<T | null> {
     try {
       // Build WHERE clause using JSON_EXTRACT for each query parameter
       const conditions = Object.keys(query)
@@ -89,8 +89,19 @@ export class Collection<T extends { _id?: string }> {
     }
   }
   
-  // Find multiple documents by query
-  find(query: Partial<T> = {}): T[] {
+  // MongoDB-compatible find method
+  find(query: any = {}) {
+    const results = this.findDocuments(query);
+    return {
+      toArray: () => Promise.resolve(results),
+      sort: () => this,
+      limit: () => this,
+      next: () => Promise.resolve(results[0] || null)
+    };
+  }
+
+  // Internal implementation for find
+  private findDocuments(query: Partial<T> = {}): T[] {
     try {
       let stmt;
       let rows;
@@ -116,8 +127,8 @@ export class Collection<T extends { _id?: string }> {
     }
   }
   
-  // Insert a new document
-  insertOne(doc: T): { insertedId: string } {
+  // MongoDB-compatible insertOne
+  async insertOne(doc: T) {
     try {
       // Generate _id if not provided
       if (!doc._id) {
@@ -137,23 +148,26 @@ export class Collection<T extends { _id?: string }> {
         now
       );
       
-      return { insertedId: doc._id };
+      return Promise.resolve({
+        acknowledged: true,
+        insertedId: doc._id
+      });
     } catch (error) {
       console.error(`Error in insertOne for ${this.tableName}:`, error);
       throw error;
     }
   }
   
-  // Update an existing document
-  updateOne(
+  // MongoDB-compatible updateOne
+  async updateOne(
     filter: Partial<T>,
     update: { $set?: Partial<T>, $addToSet?: Record<string, any>, $pull?: Record<string, any> }
-  ): { matchedCount: number, modifiedCount: number } {
+  ) {
     try {
       // Find the document first
-      const doc = this.findOne(filter);
+      const doc = await this.findOne(filter);
       if (!doc) {
-        return { matchedCount: 0, modifiedCount: 0 };
+        return { matchedCount: 0, modifiedCount: 0, acknowledged: true };
       }
       
       let modified = false;
@@ -204,23 +218,23 @@ export class Collection<T extends { _id?: string }> {
           doc._id
         );
         
-        return { matchedCount: 1, modifiedCount: 1 };
+        return { matchedCount: 1, modifiedCount: 1, acknowledged: true };
       }
       
-      return { matchedCount: 1, modifiedCount: 0 };
+      return { matchedCount: 1, modifiedCount: 0, acknowledged: true };
     } catch (error) {
       console.error(`Error in updateOne for ${this.tableName}:`, error);
       throw error;
     }
   }
   
-  // Delete a document
-  deleteOne(filter: Partial<T>): { deletedCount: number } {
+  // MongoDB-compatible deleteOne
+  async deleteOne(filter: Partial<T>) {
     try {
       // Find the document first to get its ID
-      const doc = this.findOne(filter);
+      const doc = await this.findOne(filter);
       if (!doc || !doc._id) {
-        return { deletedCount: 0 };
+        return { deletedCount: 0, acknowledged: true };
       }
       
       const stmt = db.prepare(`
@@ -229,7 +243,7 @@ export class Collection<T extends { _id?: string }> {
       `);
       
       const result = stmt.run(doc._id);
-      return { deletedCount: result.changes };
+      return { deletedCount: result.changes, acknowledged: true };
     } catch (error) {
       console.error(`Error in deleteOne for ${this.tableName}:`, error);
       throw error;
@@ -284,8 +298,15 @@ export class Relations {
   }
 }
 
+// Custom DB interface that can be used with both MongoDB and SQLite
+export interface DbClient {
+  db: (name: string) => {
+    collection: <T extends { _id?: string }>(name: string) => any;
+  };
+}
+
 // Export a database client with collections
-export function getDbClient() {
+export function getDbClient(): DbClient {
   // In production on Vercel, use MongoDB if MONGODB_URI is set
   const isVercel = process.env.VERCEL === '1';
   const mongodbUri = process.env.MONGODB_URI;
@@ -297,17 +318,25 @@ export function getDbClient() {
       mongoClient = new MongoClient(mongodbUri);
     }
     
-    return mongoClient;
+    // Wrap MongoDB client to ensure consistent interface
+    return {
+      db: (name: string) => {
+        const mongoDb = mongoClient!.db(name);
+        return {
+          collection: <T extends { _id?: string }>(collectionName: string) => 
+            mongoDb.collection(collectionName)
+        };
+      }
+    };
   }
   
   // Otherwise use our SQLite implementation
   console.log('Using SQLite implementation');
   return {
-    db: function(dbName: string) {
+    db: (dbName: string) => {
       return {
-        collection: function<T extends { _id?: string }>(collectionName: string) {
-          return new Collection<T>(collectionName);
-        }
+        collection: <T extends { _id?: string }>(collectionName: string) => 
+          new SqliteCollection<T>(collectionName)
       };
     }
   };

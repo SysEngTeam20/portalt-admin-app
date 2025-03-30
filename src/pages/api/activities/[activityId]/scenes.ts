@@ -85,12 +85,14 @@ export default async function handler(
         ? req.query.activityId[0] 
         : req.query.activityId;
 
-      const scenes = await scenesCollection.find({
+      const scenesCursor = await scenesCollection.find({
         activity_id: activityId,
         orgId
       });
       
-      return res.status(200).json(scenes.map(s => ({
+      const scenesArray = await scenesCursor.toArray();
+      
+      return res.status(200).json(scenesArray.map((s: Scene) => ({
         ...s,
         id: s._id?.toString() || '',
         _id: undefined

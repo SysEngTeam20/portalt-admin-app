@@ -65,12 +65,14 @@ export default async function handler(
     console.log("[PUBLIC_JOIN_API] Got joinCodes collection");
 
     // Find valid join code
-    const joinCodes = await joinCodesCollection.find({
+    const joinCodesCursor = await joinCodesCollection.find({
       joinCode
     });
-    console.log("[PUBLIC_JOIN_API] Found join codes:", joinCodes);
+    
+    const joinCodesArray = await joinCodesCursor.toArray();
+    console.log("[PUBLIC_JOIN_API] Found join codes:", joinCodesArray);
 
-    const joinCodeDoc = joinCodes.find(code => 
+    const joinCodeDoc = joinCodesArray.find((code: JoinCodeDocument) => 
       new Date(code.expiresAt) > new Date()
     );
 
@@ -98,7 +100,7 @@ export default async function handler(
     }
 
     // Get first scene from activity document
-    const firstScene = activity.scenes?.find(scene => scene.order === 0) || activity.scenes?.[0];
+    const firstScene = activity.scenes?.find((scene: SceneDocument) => scene.order === 0) || activity.scenes?.[0];
     console.log("[PUBLIC_JOIN_API] Found first scene:", firstScene);
 
     if (!firstScene) {

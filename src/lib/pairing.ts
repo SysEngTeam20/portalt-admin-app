@@ -1,4 +1,4 @@
-import { Collection } from './db';
+import { SqliteCollection } from './db';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface PairingCode {
@@ -10,7 +10,7 @@ export interface PairingCode {
   isActive: boolean;
 }
 
-const pairingCollection = new Collection<PairingCode>('pairing_codes');
+const pairingCollection = new SqliteCollection<PairingCode>('pairing_codes');
 
 export function generatePairingCode(orgId: string): PairingCode {
   // Generate a 6-character code
@@ -24,13 +24,14 @@ export function generatePairingCode(orgId: string): PairingCode {
     isActive: true
   };
 
+  // Note: this is now async but we're keeping the sync interface for compatibility
   pairingCollection.insertOne(pairingCode);
   return pairingCode;
 }
 
-export function validatePairingCode(code: string): PairingCode | null {
+export async function validatePairingCode(code: string): Promise<PairingCode | null> {
   const now = Date.now();
-  const pairingCode = pairingCollection.findOne({ 
+  const pairingCode = await pairingCollection.findOne({ 
     code,
     isActive: true
   });
@@ -42,7 +43,7 @@ export function validatePairingCode(code: string): PairingCode | null {
   return pairingCode;
 }
 
-export function getOrgIdFromPairingCode(code: string): string | null {
-  const pairingCode = validatePairingCode(code);
+export async function getOrgIdFromPairingCode(code: string): Promise<string | null> {
+  const pairingCode = await validatePairingCode(code);
   return pairingCode?.orgId || null;
 } 

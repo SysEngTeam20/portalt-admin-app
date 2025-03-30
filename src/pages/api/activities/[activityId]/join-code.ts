@@ -57,7 +57,8 @@ export default async function handler(
         activityId
       });
 
-      const existingCode = existingCodes.find(code => 
+      const codesArray = await existingCodes.toArray();
+      const existingCode = codesArray.find((code: JoinCodeDocument) => 
         new Date(code.expiresAt) > new Date()
       );
 

@@ -16,7 +16,7 @@ export default async function handler(
       return res.status(400).json({ error: 'Invalid code' });
     }
 
-    const orgId = getOrgIdFromPairingCode(code);
+    const orgId = await getOrgIdFromPairingCode(code);
     
     if (!orgId) {
       return res.status(401).json({ error: 'Invalid or expired code' });

@@ -74,15 +74,18 @@ export default async function handler(
 
     // GET all assets and documents
     if (req.method === 'GET') {
-      const [assets, documents] = await Promise.all([
-        db.collection<AssetDocument>("assets").find({ orgId } as any),
-        db.collection<Document>("documents").find({ orgId } as any)
+      const assetsCursor = db.collection<AssetDocument>("assets").find({ orgId } as any);
+      const documentsCursor = db.collection<Document>("documents").find({ orgId } as any);
+      
+      const [assetsArray, documentsArray] = await Promise.all([
+        assetsCursor.toArray(),
+        documentsCursor.toArray()
       ]);
 
       // Combine and sort by creation date
       const allAssets = [
-        ...assets.map(a => ({ ...a, isDocument: false })),
-        ...documents.map(d => ({
+        ...assetsArray.map((a: AssetDocument) => ({ ...a, isDocument: false })),
+        ...documentsArray.map((d: Document) => ({
           _id: d._id,
           name: d.filename,
           type: 'RAG Documents' as const,
