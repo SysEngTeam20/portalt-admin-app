@@ -1,5 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import db from './sqlite';
+import { MongoClient } from 'mongodb';
+
+// MongoDB client for production environments
+let mongoClient: MongoClient | null = null;
 
 // The Collection class mimics MongoDB collection operations
 export class Collection<T extends { _id?: string }> {
@@ -282,6 +286,22 @@ export class Relations {
 
 // Export a database client with collections
 export function getDbClient() {
+  // In production on Vercel, use MongoDB if MONGODB_URI is set
+  const isVercel = process.env.VERCEL === '1';
+  const mongodbUri = process.env.MONGODB_URI;
+  
+  if (isVercel && mongodbUri) {
+    console.log('Using MongoDB in production on Vercel');
+    
+    if (!mongoClient) {
+      mongoClient = new MongoClient(mongodbUri);
+    }
+    
+    return mongoClient;
+  }
+  
+  // Otherwise use our SQLite implementation
+  console.log('Using SQLite implementation');
   return {
     db: function(dbName: string) {
       return {
