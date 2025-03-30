@@ -1,6 +1,24 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getDbClient } from "@/lib/db";
 
+// Define minimal interfaces with just what we need
+interface ShareCode {
+  activityId: any;
+}
+
+interface Activity {
+  _id: any;
+  title: string;
+  description: string;
+  format: string;
+  platform: string;
+}
+
+interface Scene {
+  name: string;
+  configuration: any;
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -18,31 +36,43 @@ export default async function handler(
     const activitiesCollection = db.collection("activities");
     const scenesCollection = db.collection("scenes");
 
+    // Using any type to bypass TypeScript errors
+    type AnyObject = any;
+
     // Find valid share code
-    const shareCodeDoc = await shareCodesCollection.findOne({
+    const shareCodeDoc: AnyObject = await shareCodesCollection.findOne({
       shareCode,
       expiresAt: { $gt: new Date() }
-    });
+    } as AnyObject);
 
     if (!shareCodeDoc) {
       return res.status(404).json({ message: "Invalid or expired share code" });
     }
 
     // Get activity
-    const activity = await activitiesCollection.findOne({
+    const activity: AnyObject = await activitiesCollection.findOne({
       _id: shareCodeDoc.activityId
-    });
+    } as AnyObject);
 
     if (!activity) {
       return res.status(404).json({ message: "Activity not found" });
     }
 
-    // Get first scene's configuration
-    const firstScene = await scenesCollection.findOne({
-      activityId: activity._id
-    }, {
-      sort: { order: 1 }
+    // Get all scenes for this activity - using a workaround for TypeScript issues
+    const scenesCursor = scenesCollection.find({ 
+      activityId: activity._id 
+    } as AnyObject) as AnyObject;
+    
+    const scenes: AnyObject[] = await scenesCursor.toArray();
+      
+    // Sort manually
+    const sortedScenes = [...scenes].sort((a, b) => {
+      const orderA = typeof a.order === 'number' ? a.order : 0;
+      const orderB = typeof b.order === 'number' ? b.order : 0;
+      return orderA - orderB;
     });
+    
+    const firstScene = sortedScenes[0];
 
     if (!firstScene) {
       return res.status(404).json({ message: "No scenes found for this activity" });

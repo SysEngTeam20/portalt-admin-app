@@ -5,11 +5,11 @@ import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Link, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { SceneEditor } from './components/scene-editor';
-import { RagPanel } from './components/rag-panel';
-import { SettingsPanel } from './components/settings-panel';
-import { PairingModal } from './components/pairing-modal';
-import { JoinCodeModal } from './components/join-code-modal';
+import { SceneEditor } from '@/components/activity/scene-editor';
+import { RagPanel } from '@/components/activity/rag-panel';
+import { SettingsPanel } from '@/components/activity/settings-panel';
+import { PairingModal } from '@/components/activity/pairing-modal';
+import { JoinCodeModal } from '@/components/activity/join-code-modal';
 import { Activity } from '@/types/activity';
 
 export default function ActivityPage() {
