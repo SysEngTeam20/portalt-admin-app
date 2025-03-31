@@ -212,11 +212,11 @@ export default function LibraryPage() {
         }
     
         try {
-          const response = await fetch(`/api/assets/${asset._id}/access`);
+          const response = await fetch(`/api/assets/${asset._id}`);
           if (!response.ok) throw new Error('Failed to get asset access');
           
-          const { url } = await response.json();
-          window.open(url, '_blank');
+          const data = await response.json();
+          window.open(data.url, '_blank');
         } catch (error) {
           toast({
             title: "Error",
