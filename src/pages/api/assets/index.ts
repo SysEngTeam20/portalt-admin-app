@@ -10,17 +10,9 @@ import fs from 'fs';
 // Disable the default body parser for this route since we're handling file uploads
 export const config = {
   api: {
-    bodyParser: {
-      sizeLimit: '50mb',
-      // Only parse JSON requests, not multipart/form-data
-      bodyParser: (req: { headers: { [key: string]: string | string[] | undefined } }) => {
-        if (req.headers['content-type']?.includes('application/json')) {
-          return true;
-        }
-        return false;
-      }
-    },
-  },
+    bodyParser: false,
+    responseLimit: '50mb'
+  }
 };
 
 // Promisify formidable parsing
@@ -112,7 +104,24 @@ export default async function handler(
     if (req.method === 'POST') {
       // Check if this is a direct registration (no file upload)
       if (req.headers['content-type']?.includes('application/json')) {
-        const { name, url, type, size, orgId } = req.body;
+        let body;
+        try {
+          // Read the raw request body as a buffer
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) {
+            chunks.push(Buffer.from(chunk));
+          }
+          const rawBody = Buffer.concat(chunks).toString('utf-8');
+          body = JSON.parse(rawBody);
+        } catch (error) {
+          console.error("[ASSETS_API] JSON parsing error:", error);
+          return res.status(400).json({ 
+            message: "Invalid JSON in request body",
+            error: "INVALID_JSON"
+          });
+        }
+
+        const { name, url, type, size, orgId } = body;
         
         if (!name || !url || !type || !orgId) {
           return res.status(400).json({ 
