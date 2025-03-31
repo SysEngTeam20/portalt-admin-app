@@ -17,7 +17,7 @@ const BUCKET_NAME = process.env.COS_BUCKET_NAME;
 
 let cosClient: S3 | null = null;
 
-function getCosClient() {
+export function getCosClient() {
   if (!cosClient) {
     if (!config.endpoint || !config.accessKeyId || !config.secretAccessKey || !BUCKET_NAME) {
       console.error('COS Config:', {
@@ -114,7 +114,11 @@ export async function deleteDocument(key: string): Promise<void> {
 }
 
 export async function getPublicUrl(key: string): Promise<string> {
-  // Add the correct path prefix that matches your upload location
-  const fullKey = `documents/${key}`; // Matches upload path in uploadDocument()
-  return `https://${process.env.COS_BUCKET_NAME}.s3.${process.env.IBM_CLOUD_REGION}.cloud-object-storage.appdomain.cloud/${fullKey}`;
+  if (!key) {
+    throw new Error('Key is required');
+  }
+  
+  // Construct the public endpoint using the bucket name and region
+  const publicEndpoint = `${process.env.COS_BUCKET_NAME}.s3.${process.env.IBM_CLOUD_REGION}.cloud-object-storage.appdomain.cloud`;
+  return `https://${publicEndpoint}/${key}`;
 }
