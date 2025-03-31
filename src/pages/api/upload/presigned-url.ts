@@ -2,16 +2,6 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import AWS from 'ibm-cos-sdk';
 import { v4 as uuidv4 } from 'uuid';
 
-// Helper function to parse JSON body
-const parseJsonBody = async (req: NextApiRequest) => {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) {
-    chunks.push(chunk);
-  }
-  const body = Buffer.concat(chunks).toString('utf-8');
-  return JSON.parse(body);
-};
-
 // Validate required environment variables
 const requiredEnvVars = {
   IBM_CLOUD_REGION: process.env.IBM_CLOUD_REGION,
@@ -54,27 +44,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    let body;
-    if (req.headers['content-type']?.includes('application/json')) {
-      body = await parseJsonBody(req);
-    } else {
-      body = req.body;
-    }
-
-    const { fileName, contentType } = body;
+    const { fileName, contentType } = req.body;
     
     // Validate request body
     if (!fileName) {
       return res.status(400).json({ 
         message: 'fileName is required in request body',
-        received: body
+        received: req.body
       });
     }
 
     console.log('Received request for presigned URL:', {
       fileName,
       contentType,
-      body
+      body: req.body
     });
 
     // Use original filename, just ensure it's URL-safe

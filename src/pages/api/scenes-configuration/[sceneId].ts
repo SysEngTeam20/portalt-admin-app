@@ -2,16 +2,6 @@ import { getDbClient } from "@/lib/db";
 import { getAuth } from "@clerk/nextjs/server";
 import { NextApiRequest, NextApiResponse } from "next";
 
-// Helper function to parse JSON body
-const parseJsonBody = async (req: NextApiRequest) => {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) {
-    chunks.push(chunk);
-  }
-  const body = Buffer.concat(chunks).toString('utf-8');
-  return JSON.parse(body);
-};
-
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -81,21 +71,14 @@ export default async function handler(
           return res.status(400).json({ message: "orgId is required either as a query parameter or through authentication" });
         }
 
-        let body;
-        if (req.headers['content-type']?.includes('application/json')) {
-          body = await parseJsonBody(req);
-        } else {
-          body = req.body;
-        }
-
-        console.log("[SCENE_CONFIG_API] PUT request body:", body);
+        console.log("[SCENE_CONFIG_API] PUT request body:", req.body);
         const existing = await collection.findOne({ scene_id: sceneId, orgId });
         console.log("[SCENE_CONFIG_API] Existing config:", existing);
         
         if (!existing) {
           const newConfig = {
             scene_id: sceneId,
-            ...body,
+            ...req.body,
             orgId,
             createdAt: new Date(),
             updatedAt: new Date()
@@ -105,7 +88,7 @@ export default async function handler(
           return res.status(200).json(newConfig);
         } else {
           // Remove _id and any other immutable fields from the update
-          const { _id, ...updateData } = body;
+          const { _id, ...updateData } = req.body;
           const updatedConfig = {
             ...existing,
             ...updateData,

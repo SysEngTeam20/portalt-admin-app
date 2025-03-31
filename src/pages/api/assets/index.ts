@@ -26,16 +26,6 @@ const parseForm = (req: NextApiRequest) => {
   });
 };
 
-// Helper function to parse JSON body
-const parseJsonBody = async (req: NextApiRequest) => {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) {
-    chunks.push(chunk);
-  }
-  const body = Buffer.concat(chunks).toString('utf-8');
-  return JSON.parse(body);
-};
-
 interface AssetDocument {
   _id: string;
   name: string;
@@ -114,17 +104,16 @@ export default async function handler(
     if (req.method === 'POST') {
       // Check if this is a direct registration (no file upload)
       if (req.headers['content-type']?.includes('application/json')) {
-        try {
-          const body = await parseJsonBody(req);
-          const { name, url, type, size } = body;
-          
-          if (!name || !url || !type) {
-            return res.status(400).json({ 
-              message: "name, url, and type are required",
-              error: "MISSING_REQUIRED_FIELDS"
-            });
-          }
+        const { name, url, type, size, orgId } = req.body;
+        
+        if (!name || !url || !type || !orgId) {
+          return res.status(400).json({ 
+            message: "name, url, type, and orgId are required",
+            error: "MISSING_REQUIRED_FIELDS"
+          });
+        }
 
+        try {
           const newAsset: AssetDocument = {
             _id: uuidv4(),
             name,
@@ -139,35 +128,35 @@ export default async function handler(
           await db.collection<AssetDocument>("assets").insertOne(newAsset);
           return res.status(201).json(newAsset);
         } catch (error) {
-          console.error("[ASSETS_API] JSON parsing error:", error);
-          return res.status(400).json({ 
-            message: "Invalid JSON body",
-            error: "INVALID_JSON"
+          console.error("[ASSETS_API] Registration error:", error);
+          return res.status(500).json({ 
+            message: "Failed to register asset",
+            error: "REGISTRATION_ERROR"
           });
         }
       }
 
-      // Handle file upload
+      // Handle file upload (existing code)
+      const { fields, files } = await parseForm(req);
+      const file = Array.isArray(files.file) ? files.file[0] : files.file;
+      
+      if (!file) {
+        return res.status(400).json({ 
+          message: "No file uploaded",
+          error: "MISSING_FILE"
+        });
+      }
+
+      // Check file size (50MB limit)
+      if (file.size > 50 * 1024 * 1024) {
+        return res.status(413).json({ 
+          message: "File size exceeds 50MB limit",
+          error: "FILE_TOO_LARGE",
+          maxSize: "50MB"
+        });
+      }
+
       try {
-        const { fields, files } = await parseForm(req);
-        const file = Array.isArray(files.file) ? files.file[0] : files.file;
-        
-        if (!file) {
-          return res.status(400).json({ 
-            message: "No file uploaded",
-            error: "MISSING_FILE"
-          });
-        }
-
-        // Check file size (50MB limit)
-        if (file.size > 50 * 1024 * 1024) {
-          return res.status(413).json({ 
-            message: "File size exceeds 50MB limit",
-            error: "FILE_TOO_LARGE",
-            maxSize: "50MB"
-          });
-        }
-
         // Read file buffer and upload to COS
         const fileBuffer = fs.readFileSync(file.filepath);
         const cosResponse = await uploadDocument(
@@ -197,10 +186,24 @@ export default async function handler(
           fileType: file.mimetype
         });
       } catch (error) {
-        console.error("[ASSETS_API] Form parsing error:", error);
-        return res.status(400).json({ 
-          message: "Failed to parse form data",
-          error: "FORM_PARSING_ERROR"
+        console.error("[ASSETS_API] Upload error:", error);
+        if (error instanceof Error) {
+          if (error.message.includes('Missing required COS configuration')) {
+            return res.status(500).json({ 
+              message: "Storage service configuration error",
+              error: "STORAGE_CONFIG_ERROR"
+            });
+          }
+          if (error.message.includes('upload failed')) {
+            return res.status(500).json({ 
+              message: "Failed to upload file to storage",
+              error: "STORAGE_UPLOAD_ERROR"
+            });
+          }
+        }
+        return res.status(500).json({ 
+          message: "Failed to process file upload",
+          error: "UPLOAD_PROCESSING_ERROR"
         });
       }
     }
