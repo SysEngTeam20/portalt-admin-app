@@ -262,6 +262,16 @@ const SceneArtifactsCard = ({
   const handleFileUpload = async (file: File) => {
     setIsAddingArtifact(true);
     try {
+      // Check file size (50MB limit)
+      if (file.size > 50 * 1024 * 1024) {
+        toast({
+          title: "File Too Large",
+          description: "File size exceeds 50MB limit. Please choose a smaller file.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Step 1: Upload to assets
       const assetFormData = new FormData();
       assetFormData.append('file', file);
@@ -344,6 +354,16 @@ const SceneArtifactsCard = ({
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (file) {
+                            // Check file size (50MB limit)
+                            if (file.size > 50 * 1024 * 1024) {
+                              toast({
+                                title: "File Too Large",
+                                description: "File size exceeds 50MB limit. Please choose a smaller file.",
+                                variant: "destructive",
+                              });
+                              e.target.value = '';
+                              return;
+                            }
                             await handleFileUpload(file);
                           }
                         }}
@@ -365,6 +385,9 @@ const SceneArtifactsCard = ({
                           <>
                             <p className="text-sm text-muted-foreground">
                               Drag and drop or click to upload
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Maximum file size: 50MB
                             </p>
                           </>
                         )}

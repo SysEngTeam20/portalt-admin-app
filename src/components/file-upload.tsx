@@ -19,6 +19,13 @@ export function FileUpload({ onUpload, accept = '*', label = 'Upload File' }: Fi
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Check file size (50MB limit)
+    if (file.size > 50 * 1024 * 1024) {
+      alert('File size exceeds 50MB limit. Please choose a smaller file.');
+      e.target.value = '';
+      return;
+    }
+
     try {
       setIsUploading(true);
       await onUpload(file);
@@ -52,6 +59,9 @@ export function FileUpload({ onUpload, accept = '*', label = 'Upload File' }: Fi
           </div>
         </Button>
       </label>
+      <p className="text-xs text-muted-foreground text-center">
+        Maximum file size: 50MB
+      </p>
     </div>
   );
 } 

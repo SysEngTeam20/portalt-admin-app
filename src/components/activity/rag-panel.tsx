@@ -243,13 +243,29 @@ export function RagPanel({ activity }: RagPanelProps) {
                   >
                     <Upload className="h-8 w-8" />
                     <span>Upload New</span>
+                    <span className="text-xs text-muted-foreground">Max 50MB</span>
                   </Button>
                   <input
                     type="file"
                     ref={fileInputRef}
                     className="hidden"
                     accept=".pdf,.doc,.docx,.txt"
-                    onChange={handleFileUpload}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        // Check file size (50MB limit)
+                        if (file.size > 50 * 1024 * 1024) {
+                          toast({
+                            title: "File Too Large",
+                            description: "File size exceeds 50MB limit. Please choose a smaller file.",
+                            variant: "destructive",
+                          });
+                          e.target.value = '';
+                          return;
+                        }
+                        await handleFileUpload(e);
+                      }
+                    }}
                   />
 
                   {/* Select from Library Option - unchanged */}
