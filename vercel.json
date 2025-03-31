@@ -3,9 +3,7 @@
     "src/pages/api/**/*.ts": {
       "memory": 3008,
       "maxDuration": 60
-    }
-  },
-  "functions": {
+    },
     "api/*.ts": {
       "memory": 3008,
       "maxDuration": 60
