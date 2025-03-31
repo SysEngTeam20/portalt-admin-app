@@ -9,17 +9,9 @@ import fs from 'fs';
 // Disable the default body parser for this route since we're handling file uploads
 export const config = {
   api: {
-    bodyParser: {
-      sizeLimit: '50mb',
-      // Only parse JSON requests, not multipart/form-data
-      bodyParser: (req: { headers: { [key: string]: string | string[] | undefined } }) => {
-        if (req.headers['content-type']?.includes('application/json')) {
-          return true;
-        }
-        return false;
-      }
-    },
-  },
+    bodyParser: false,
+    responseLimit: '50mb'
+  }
 };
 
 // Promisify formidable parsing
