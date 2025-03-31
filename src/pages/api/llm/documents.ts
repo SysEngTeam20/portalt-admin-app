@@ -59,20 +59,36 @@ export default async function handler(
     
     // First try to get sceneId directly from payload
     let sceneId: string | undefined = payload?.sceneId?.toString();
+    let activityId: string | undefined = payload?.activityId?.toString();
     
-    // If no sceneId in payload, try parsing activityId as the sceneId
-    // (allows backward compatibility with tokens that store sceneId as activityId)
-    if (!sceneId && payload?.activityId) {
-      console.log("[LLM_DOCUMENTS_GET] No sceneId found, trying activityId as sceneId:", payload.activityId);
-      sceneId = payload.activityId.toString();
+    // If no sceneId in payload but we have activityId, try to find a scene for that activity
+    if (!sceneId && activityId) {
+      console.log("[LLM_DOCUMENTS_GET] No sceneId found, trying to find scene for activityId:", activityId);
+      const client = getDbClient();
+      const db = client.db("cluster0");
+      const scenesCollection = db.collection<Scene>("scenes");
+      
+      // Try to find a scene by activity_id or activityId
+      const scene = await scenesCollection.findOne({
+        $or: [
+          { activity_id: activityId },
+          { activityId: activityId }
+        ]
+      });
+      
+      if (scene) {
+        sceneId = scene._id || scene.id;
+        console.log("[LLM_DOCUMENTS_GET] Found scene for activity:", sceneId);
+      }
     }
     
-    if (!sceneId) {
-      console.log("[LLM_DOCUMENTS_GET] No valid sceneId found in token");
-      return res.status(401).json({ message: "Invalid token: no sceneId found" });
+    // If we have an activityId but no sceneId, we can proceed with just the activityId
+    if (!sceneId && !activityId) {
+      console.log("[LLM_DOCUMENTS_GET] No valid sceneId or activityId found in token");
+      return res.status(401).json({ message: "Invalid token: no sceneId or activityId found" });
     }
 
-    console.log("[LLM_DOCUMENTS_GET] Request received with sceneId:", sceneId);
+    console.log("[LLM_DOCUMENTS_GET] Request received with sceneId:", sceneId, "activityId:", activityId);
     
     const client = getDbClient();
     const db = client.db("cluster0");
@@ -85,142 +101,128 @@ export default async function handler(
     const scenesCollection = db.collection<Scene>("scenes");
     const activitiesCollection = db.collection<Activity>("activities");
     
-    // DEBUG: Get total count of scenes for debugging
-    const totalScenes = await scenesCollection.find({}).length;
-    console.log("[LLM_DOCUMENTS_GET] Total scenes in DB:", totalScenes);
-    
-    // DEBUG: Try to get ALL scenes with a simple query
-    const someScenes = await scenesCollection.find({});
-    console.log("[LLM_DOCUMENTS_GET] First few scenes:", 
-                JSON.stringify(someScenes.slice(0, 3)));
-    
-    // Try to find scene by either _id or id field
-    let scene = await scenesCollection.findOne({
-      _id: sceneId
-    });
-    
-    // If not found by _id, try the id field
-    if (!scene) {
-      console.log("[LLM_DOCUMENTS_GET] Scene not found by _id, trying id field");
+    // If we have an activityId but no sceneId, we can skip scene lookup
+    let scene: Scene | null = null;
+    if (sceneId) {
+      // DEBUG: Get total count of scenes for debugging
+      const totalScenes = await scenesCollection.find({}).length;
+      console.log("[LLM_DOCUMENTS_GET] Total scenes in DB:", totalScenes);
+      
+      // DEBUG: Try to get ALL scenes with a simple query
+      const someScenes = await scenesCollection.find({});
+      console.log("[LLM_DOCUMENTS_GET] First few scenes:", 
+                  JSON.stringify(someScenes.slice(0, 3)));
+      
+      // Try to find scene by either _id or id field
       scene = await scenesCollection.findOne({
-        id: sceneId
-      });
-    }
-    
-    // If still no scene found, try looking up by scene_id field in scenes_configuration
-    let sceneConfig: SceneConfiguration | null = null;
-    if (!scene) {
-      console.log("[LLM_DOCUMENTS_GET] Scene not found by id either, trying scenes_configuration lookup");
-      const sceneConfigCollection = db.collection<SceneConfiguration>("scenes_configuration");
-      
-      // Check if the scenes_configuration collection exists
-      const hasSceneConfigs = await sceneConfigCollection.find({}).length > 0;
-      console.log("[LLM_DOCUMENTS_GET] Has scene configs?", hasSceneConfigs);
-      
-      // Try to find config with scene_id
-      sceneConfig = await sceneConfigCollection.findOne({
-        scene_id: sceneId
+        _id: sceneId
       });
       
-      // If not found, try with camelCase
-      if (!sceneConfig) {
-        console.log("[LLM_DOCUMENTS_GET] Config not found with snake_case, trying camelCase");
-        const camelCaseConfig = await sceneConfigCollection.findOne({
-          sceneId: sceneId
+      // If not found by _id, try the id field
+      if (!scene) {
+        console.log("[LLM_DOCUMENTS_GET] Scene not found by _id, trying id field");
+        scene = await scenesCollection.findOne({
+          id: sceneId
+        });
+      }
+      
+      // If still no scene found, try looking up by scene_id field in scenes_configuration
+      let sceneConfig: SceneConfiguration | null = null;
+      if (!scene) {
+        console.log("[LLM_DOCUMENTS_GET] Scene not found by id either, trying scenes_configuration lookup");
+        const sceneConfigCollection = db.collection<SceneConfiguration>("scenes_configuration");
+        
+        // Check if the scenes_configuration collection exists
+        const hasSceneConfigs = await sceneConfigCollection.find({}).length > 0;
+        console.log("[LLM_DOCUMENTS_GET] Has scene configs?", hasSceneConfigs);
+        
+        // Try to find config with scene_id
+        sceneConfig = await sceneConfigCollection.findOne({
+          scene_id: sceneId
         });
         
-        if (camelCaseConfig) {
-          console.log("[LLM_DOCUMENTS_GET] Found config with camelCase:", JSON.stringify(camelCaseConfig));
-          sceneConfig = camelCaseConfig;
-          
-          // Handle both scene_id and sceneId
-          const configSceneId = camelCaseConfig.scene_id || camelCaseConfig.sceneId;
-          
-          if (configSceneId) {
-            console.log("[LLM_DOCUMENTS_GET] Looking up scene by configSceneId:", configSceneId);
-            scene = await scenesCollection.findOne({
-              _id: configSceneId
-            }) || await scenesCollection.findOne({
-              id: configSceneId 
-            });
-          }
-        }
-      } else {
-        console.log("[LLM_DOCUMENTS_GET] Found scene config:", JSON.stringify(sceneConfig));
-        
-        // Try both _id and id fields when looking up by scene_id from config
-        if (sceneConfig.scene_id) {
-          console.log("[LLM_DOCUMENTS_GET] Looking up scene by config.scene_id:", sceneConfig.scene_id);
-          scene = await scenesCollection.findOne({
-            _id: sceneConfig.scene_id
+        // If not found, try with camelCase
+        if (!sceneConfig) {
+          console.log("[LLM_DOCUMENTS_GET] Config not found with snake_case, trying camelCase");
+          const camelCaseConfig = await sceneConfigCollection.findOne({
+            sceneId: sceneId
           });
           
-          if (!scene) {
+          if (camelCaseConfig) {
+            console.log("[LLM_DOCUMENTS_GET] Found config with camelCase:", JSON.stringify(camelCaseConfig));
+            sceneConfig = camelCaseConfig;
+            
+            // Handle both scene_id and sceneId
+            const configSceneId = camelCaseConfig.scene_id || camelCaseConfig.sceneId;
+            
+            if (configSceneId) {
+              console.log("[LLM_DOCUMENTS_GET] Looking up scene by configSceneId:", configSceneId);
+              scene = await scenesCollection.findOne({
+                _id: configSceneId
+              }) || await scenesCollection.findOne({
+                id: configSceneId 
+              });
+            }
+          }
+        } else {
+          console.log("[LLM_DOCUMENTS_GET] Found scene config:", JSON.stringify(sceneConfig));
+          
+          // Try both _id and id fields when looking up by scene_id from config
+          if (sceneConfig.scene_id) {
+            console.log("[LLM_DOCUMENTS_GET] Looking up scene by config.scene_id:", sceneConfig.scene_id);
             scene = await scenesCollection.findOne({
-              id: sceneConfig.scene_id
+              _id: sceneConfig.scene_id
             });
+            
+            if (!scene) {
+              scene = await scenesCollection.findOne({
+                id: sceneConfig.scene_id
+              });
+            }
           }
         }
       }
-    }
-    
-    // If still no scene, try finding the scene by checking if the sceneId is actually an activityId
-    if (!scene) {
-      console.log("[LLM_DOCUMENTS_GET] Still no scene found, checking if sceneId is an activityId");
       
-      // Try both activity_id and activityId fields
-      const scenesForActivity = await scenesCollection.find({
-        activity_id: sceneId
-      }) || await scenesCollection.find({
-        activityId: sceneId
-      });
-      
-      // If we found scenes, use the first one
-      if (scenesForActivity && scenesForActivity.length > 0) {
-        console.log("[LLM_DOCUMENTS_GET] Found scenes by activity_id, using first scene");
-        scene = scenesForActivity[0];
-      }
-    }
-    
-    // LAST RESORT: Try a substring match on id or _id
-    if (!scene) {
-      console.log("[LLM_DOCUMENTS_GET] Attempting substring match on id field as last resort");
-      const allScenes = await scenesCollection.find({});
-      
-      for (const possibleScene of allScenes) {
-        const sceneIdField = possibleScene.id || possibleScene._id || "";
-        if (sceneIdField.toString().includes(sceneId)) {
-          console.log("[LLM_DOCUMENTS_GET] Found scene via substring match:", JSON.stringify(possibleScene));
-          scene = possibleScene;
-          break;
+      // LAST RESORT: Try a substring match on id or _id
+      if (!scene) {
+        console.log("[LLM_DOCUMENTS_GET] Attempting substring match on id field as last resort");
+        const allScenes = await scenesCollection.find({});
+        
+        for (const possibleScene of allScenes) {
+          const sceneIdField = possibleScene.id || possibleScene._id || "";
+          if (sceneIdField.toString().includes(sceneId)) {
+            console.log("[LLM_DOCUMENTS_GET] Found scene via substring match:", JSON.stringify(possibleScene));
+            scene = possibleScene;
+            break;
+          }
         }
       }
-    }
-    
-    // SPECIAL CASE: If we found a scene configuration but no scene, create a virtual scene object
-    if (!scene && sceneConfig) {
-      console.log("[LLM_DOCUMENTS_GET] No scene found but scene configuration exists. Looking up activities.");
       
-      // Get all activities to find potential matches
-      const allActivities = await activitiesCollection.find({});
-      console.log("[LLM_DOCUMENTS_GET] Found", allActivities.length, "activities");
-      
-      if (allActivities.length > 0) {
-        // For now, use the first activity we find (in real production, this should be more sophisticated)
-        const firstActivity = allActivities[0];
-        console.log("[LLM_DOCUMENTS_GET] Using first activity:", JSON.stringify(firstActivity));
+      // SPECIAL CASE: If we found a scene configuration but no scene, create a virtual scene object
+      if (!scene && sceneConfig) {
+        console.log("[LLM_DOCUMENTS_GET] No scene found but scene configuration exists. Looking up activities.");
         
-        // Create a virtual scene object
-        scene = {
-          _id: sceneId,
-          id: sceneId,
-          activity_id: firstActivity._id,
-          orgId: sceneConfig.orgId || firstActivity.orgId,
-          name: "Virtual Scene",
-          order: 1
-        };
+        // Get all activities to find potential matches
+        const allActivities = await activitiesCollection.find({});
+        console.log("[LLM_DOCUMENTS_GET] Found", allActivities.length, "activities");
         
-        console.log("[LLM_DOCUMENTS_GET] Created virtual scene:", JSON.stringify(scene));
+        if (allActivities.length > 0) {
+          // For now, use the first activity we find (in real production, this should be more sophisticated)
+          const firstActivity = allActivities[0];
+          console.log("[LLM_DOCUMENTS_GET] Using first activity:", JSON.stringify(firstActivity));
+          
+          // Create a virtual scene object
+          scene = {
+            _id: sceneId,
+            id: sceneId,
+            activity_id: firstActivity._id,
+            orgId: sceneConfig.orgId || firstActivity.orgId,
+            name: "Virtual Scene",
+            order: 1
+          };
+          
+          console.log("[LLM_DOCUMENTS_GET] Created virtual scene:", JSON.stringify(scene));
+        }
       }
     }
     
@@ -231,28 +233,29 @@ export default async function handler(
       console.log("[LLM_DOCUMENTS_GET] Scene details:", JSON.stringify(scene));
     }
 
-    if (!scene) {
+    // If we have neither scene nor activityId, return 404
+    if (!scene && !activityId) {
       return res.status(404).json({ message: "Scene not found" });
     }
 
-    // Try both activity_id and activityId fields
-    const activityId = scene.activity_id || scene.activityId;
+    // Use activityId from scene if available, otherwise use the one from token
+    const finalActivityId = scene?.activity_id || scene?.activityId || activityId;
     
-    if (!activityId) {
-      console.log("[LLM_DOCUMENTS_GET] No activity_id found in scene:", JSON.stringify(scene));
-      return res.status(404).json({ message: "Scene has no activity_id" });
+    if (!finalActivityId) {
+      console.log("[LLM_DOCUMENTS_GET] No activity_id found in scene or token:", JSON.stringify(scene));
+      return res.status(404).json({ message: "No activity_id found" });
     }
     
-    console.log("[LLM_DOCUMENTS_GET] Found scene with activity_id:", activityId);
+    console.log("[LLM_DOCUMENTS_GET] Using activity_id:", finalActivityId);
 
     // Get the activity and verify RAG is enabled
     const activity = await db.collection<Activity>("activities").findOne({
-      _id: activityId,
+      _id: finalActivityId,
     });
     
     console.log("[LLM_DOCUMENTS_GET] Activity lookup result:", 
                 activity ? (activity.ragEnabled ? "found with RAG enabled" : "found but RAG disabled") : "not found",
-                "for activity_id:", activityId);
+                "for activity_id:", finalActivityId);
     
     if (!activity) {
       return res.status(404).json({ message: "Activity not found" });
@@ -265,9 +268,9 @@ export default async function handler(
     }
 
     // Get all documents associated with this activity using Relations helper
-    console.log("[LLM_DOCUMENTS_GET] Querying documents for activity_id:", activityId);
+    console.log("[LLM_DOCUMENTS_GET] Querying documents for activity_id:", finalActivityId);
     
-    const documentIds = Relations.getDocumentsByActivityId(activityId);
+    const documentIds = await Relations.getDocumentsByActivityId(finalActivityId);
     console.log("[LLM_DOCUMENTS_GET] Found document IDs:", documentIds);
     
     // Get the full document data for each ID
@@ -279,7 +282,7 @@ export default async function handler(
       if (doc) documentArray.push(doc);
     }
     
-    console.log("[LLM_DOCUMENTS_GET] Retrieved", documentArray.length, "documents for activity_id:", activityId);
+    console.log("[LLM_DOCUMENTS_GET] Retrieved", documentArray.length, "documents for activity_id:", finalActivityId);
     
     // Generate short-lived signed URLs for each document
     const documentsWithUrls = await Promise.all(
