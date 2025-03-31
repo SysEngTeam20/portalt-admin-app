@@ -2,14 +2,13 @@
   "functions": {
     "src/pages/api/**/*.ts": {
       "memory": 3008,
-      "maxDuration": 60
+      "maxDuration": 60,
+      "maxBodySize": "50mb"
     },
     "api/*.ts": {
       "memory": 3008,
-      "maxDuration": 60
+      "maxDuration": 60,
+      "maxBodySize": "50mb"
     }
-  },
-  "bodyParser": {
-    "sizeLimit": "50mb"
   }
 } 
