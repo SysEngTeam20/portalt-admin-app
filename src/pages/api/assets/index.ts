@@ -10,16 +10,24 @@ import fs from 'fs';
 // Disable the default body parser for this route since we're handling file uploads
 export const config = {
   api: {
-    bodyParser: false,
-    responseLimit: '50mb'
-  }
+    bodyParser: {
+      sizeLimit: '50mb',
+      // Only parse JSON requests, not multipart/form-data
+      bodyParser: (req: { headers: { [key: string]: string | string[] | undefined } }) => {
+        if (req.headers['content-type']?.includes('application/json')) {
+          return true;
+        }
+        return false;
+      }
+    },
+  },
 };
 
 // Promisify formidable parsing
 const parseForm = (req: NextApiRequest) => {
-  return new Promise<{fields: formidable.Fields, files: formidable.Files}>((resolve, reject) => {
+  return new Promise<{fields: any, files: any}>((resolve, reject) => {
     const form = new formidable.IncomingForm();
-    form.parse(req, (err: any, fields: formidable.Fields, files: formidable.Files) => {
+    form.parse(req, (err, fields, files) => {
       if (err) return reject(err);
       resolve({ fields, files });
     });
