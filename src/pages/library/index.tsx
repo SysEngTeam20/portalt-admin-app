@@ -68,16 +68,31 @@ export default function LibraryPage() {
     const files = event.target.files;
     if (!files?.length) return;
 
+    const file = files[0];
+    // Check file size (50MB limit)
+    if (file.size > 50 * 1024 * 1024) {
+      toast({
+        title: "File Too Large",
+        description: "File size exceeds 50MB limit. Please choose a smaller file.",
+        variant: "destructive",
+      });
+      event.target.value = '';
+      return;
+    }
+
     try {
       const formData = new FormData();
-      formData.append('file', files[0]);
+      formData.append('file', file);
 
       const response = await fetch('/api/assets', {
         method: 'POST',
         body: formData,
       });
 
-      if (!response.ok) throw new Error('Failed to upload asset');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to upload asset');
+      }
       
       const newAsset = await response.json();
       setAssets(prev => [newAsset, ...prev]);
@@ -87,11 +102,14 @@ export default function LibraryPage() {
         description: "Asset uploaded successfully",
       });
     } catch (error) {
+      console.error('Upload error:', error);
       toast({
-        title: "Error",
-        description: "Failed to upload asset",
+        title: "Upload Failed",
+        description: error instanceof Error ? error.message : "Failed to upload asset. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      event.target.value = '';
     }
   };
 

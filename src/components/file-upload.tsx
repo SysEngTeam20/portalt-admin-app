@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
 
 interface FileUploadProps {
   onUpload: (file: File) => Promise<void> | void;
@@ -13,6 +14,7 @@ interface FileUploadProps {
 
 export function FileUpload({ onUpload, accept = '*', label = 'Upload File' }: FileUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
+  const { toast } = useToast();
   const inputId = `file-upload-${Math.random().toString(36).substr(2, 9)}`;
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -21,7 +23,11 @@ export function FileUpload({ onUpload, accept = '*', label = 'Upload File' }: Fi
 
     // Check file size (50MB limit)
     if (file.size > 50 * 1024 * 1024) {
-      alert('File size exceeds 50MB limit. Please choose a smaller file.');
+      toast({
+        title: "File Too Large",
+        description: "File size exceeds 50MB limit. Please choose a smaller file.",
+        variant: "destructive",
+      });
       e.target.value = '';
       return;
     }
@@ -29,6 +35,13 @@ export function FileUpload({ onUpload, accept = '*', label = 'Upload File' }: Fi
     try {
       setIsUploading(true);
       await onUpload(file);
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast({
+        title: "Upload Failed",
+        description: error instanceof Error ? error.message : "Failed to upload file. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsUploading(false);
       // Reset input to allow same file selection again
@@ -55,7 +68,7 @@ export function FileUpload({ onUpload, accept = '*', label = 'Upload File' }: Fi
         >
           <div>
             <Upload className="h-4 w-4" />
-            {label}
+            {isUploading ? 'Uploading...' : label}
           </div>
         </Button>
       </label>

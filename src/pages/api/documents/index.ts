@@ -78,75 +78,92 @@ export default async function handler(
       const activityId = fields.activityId ? String(fields.activityId) : null;
       
       if (!fileEntry) {
-        return res.status(400).json({ message: "File is required" });
+        return res.status(400).json({ 
+          message: "File is required",
+          error: "MISSING_FILE"
+        });
       }
       
       // Handle both single file and array of files (formidable can return either)
       const file = Array.isArray(fileEntry) ? fileEntry[0] : fileEntry;
       
       if (!file) {
-        return res.status(400).json({ message: "File is required" });
+        return res.status(400).json({ 
+          message: "File is required",
+          error: "MISSING_FILE"
+        });
+      }
+
+      // Check file size (50MB limit)
+      const fileSize = fs.statSync(file.filepath).size;
+      if (fileSize > 50 * 1024 * 1024) {
+        return res.status(413).json({ 
+          message: "File size exceeds 50MB limit",
+          error: "FILE_TOO_LARGE",
+          maxSize: "50MB"
+        });
       }
 
       safeLog({
         name: file.originalFilename || 'unnamed-file',
         type: file.mimetype || 'application/octet-stream',
-        size: fs.statSync(file.filepath).size,
+        size: fileSize,
         activityId
       }, 'Uploading file');
 
-      // Generate a safe filename
-      const timestamp = Date.now();
-      const safeName = (file.originalFilename || 'unnamed-file').replace(/[^a-zA-Z0-9.-]/g, '_');
-      const uniqueFilename = `${timestamp}-${safeName}`;
+      try {
+        // Generate a safe filename
+        const timestamp = Date.now();
+        const safeName = (file.originalFilename || 'unnamed-file').replace(/[^a-zA-Z0-9.-]/g, '_');
+        const uniqueFilename = `${timestamp}-${safeName}`;
 
-      // Upload to COS
-      const buffer = fs.readFileSync(file.filepath);
-      const cosKey = await uploadDocument(buffer, uniqueFilename, file.mimetype || 'application/octet-stream');
+        // Upload to COS
+        const buffer = fs.readFileSync(file.filepath);
+        const cosKey = await uploadDocument(buffer, uniqueFilename, file.mimetype || 'application/octet-stream');
 
-      console.log('File uploaded to COS:', cosKey);
+        console.log('File uploaded to COS:', cosKey);
 
-      const client = getDbClient();
-      const db = client.db("cluster0");
+        const client = getDbClient();
+        const db = client.db("cluster0");
 
-      // Create document metadata
-      const document = {
-        _id: uuidv4(),
-        filename: file.originalFilename || 'unnamed-file',
-        originalName: file.originalFilename || 'unnamed-file',
-        mimeType: file.mimetype || 'application/octet-stream',
-        size: fs.statSync(file.filepath).size,
-        url: cosKey,
-        orgId,
-        activityIds: [] as string[],
-        metadata: {},
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+        // Create document metadata
+        const document = {
+          _id: uuidv4(),
+          filename: file.originalFilename || 'unnamed-file',
+          originalName: file.originalFilename || 'unnamed-file',
+          mimeType: file.mimetype || 'application/octet-stream',
+          size: fileSize,
+          url: cosKey,
+          orgId,
+          activityIds: activityId ? [activityId] : [] as string[],
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
 
-      await db.collection("documents").insertOne(document);
-
-      // If activityId provided, link the document to the activity
-      if (activityId) {
-        try {
-          // Update the document's activityIds array
-          document.activityIds.push(activityId);
-          await db.collection("documents").updateOne(
-            { _id: document._id },
-            { $set: { activityIds: document.activityIds, updatedAt: new Date() } }
-          );
-          
-          // Create the relation in the join table
-          await Relations.linkDocumentToActivity(document._id, activityId);
-        } catch (linkError) {
-          console.error("[DOCUMENTS_API] Error linking document:", linkError);
+        await db.collection("documents").insertOne(document);
+        return res.status(201).json(document);
+      } catch (error) {
+        console.error("[DOCUMENTS_API] Upload error:", error);
+        if (error instanceof Error) {
+          if (error.message.includes('Missing required COS configuration')) {
+            return res.status(500).json({ 
+              message: "Storage service configuration error",
+              error: "STORAGE_CONFIG_ERROR"
+            });
+          }
+          if (error.message.includes('upload failed')) {
+            return res.status(500).json({ 
+              message: "Failed to upload file to storage",
+              error: "STORAGE_UPLOAD_ERROR"
+            });
+          }
         }
+        return res.status(500).json({ 
+          message: "Failed to process file upload",
+          error: "UPLOAD_PROCESSING_ERROR"
+        });
       }
-
-      // Clean up the temp file
-      fs.unlinkSync(file.filepath);
-
-      return res.status(200).json(document);
     }
     
     // Handle unsupported methods

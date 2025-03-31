@@ -105,37 +105,71 @@ export default async function handler(
       const file = Array.isArray(files.file) ? files.file[0] : files.file;
       
       if (!file) {
-        return res.status(400).json({ message: "No file uploaded" });
+        return res.status(400).json({ 
+          message: "No file uploaded",
+          error: "MISSING_FILE"
+        });
       }
 
-      // Read file buffer and upload to COS
-      const fileBuffer = fs.readFileSync(file.filepath);
-      const cosResponse = await uploadDocument(
-        fileBuffer,
-        file.originalFilename || 'unnamed',
-        orgId
-      );
-      const cosUrl = cosResponse;  // Direct assignment since response is the URL string
-      
-      const newAsset: AssetDocument = {
-        _id: uuidv4(),
-        name: fields.name?.[0] || file.originalFilename || 'Unnamed Asset',
-        type: getAssetType(file.originalFilename || 'unnamed'), // Use auto-detected type
-        size: file.size,
-        url: cosUrl,
-        orgId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
+      // Check file size (50MB limit)
+      if (file.size > 50 * 1024 * 1024) {
+        return res.status(413).json({ 
+          message: "File size exceeds 50MB limit",
+          error: "FILE_TOO_LARGE",
+          maxSize: "50MB"
+        });
+      }
 
-      await db.collection<AssetDocument>("assets").insertOne(newAsset);
-      
-      const publicUrl = await getPublicUrl(cosUrl.split('/').pop() || '');
-      return res.status(201).json({
-        url: publicUrl,
-        fileName: file.originalFilename,
-        fileType: file.mimetype
-      });
+      try {
+        // Read file buffer and upload to COS
+        const fileBuffer = fs.readFileSync(file.filepath);
+        const cosResponse = await uploadDocument(
+          fileBuffer,
+          file.originalFilename || 'unnamed',
+          orgId
+        );
+        const cosUrl = cosResponse;
+        
+        const newAsset: AssetDocument = {
+          _id: uuidv4(),
+          name: fields.name?.[0] || file.originalFilename || 'Unnamed Asset',
+          type: getAssetType(file.originalFilename || 'unnamed'),
+          size: file.size,
+          url: cosUrl,
+          orgId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        await db.collection<AssetDocument>("assets").insertOne(newAsset);
+        
+        const publicUrl = await getPublicUrl(cosUrl.split('/').pop() || '');
+        return res.status(201).json({
+          url: publicUrl,
+          fileName: file.originalFilename,
+          fileType: file.mimetype
+        });
+      } catch (error) {
+        console.error("[ASSETS_API] Upload error:", error);
+        if (error instanceof Error) {
+          if (error.message.includes('Missing required COS configuration')) {
+            return res.status(500).json({ 
+              message: "Storage service configuration error",
+              error: "STORAGE_CONFIG_ERROR"
+            });
+          }
+          if (error.message.includes('upload failed')) {
+            return res.status(500).json({ 
+              message: "Failed to upload file to storage",
+              error: "STORAGE_UPLOAD_ERROR"
+            });
+          }
+        }
+        return res.status(500).json({ 
+          message: "Failed to process file upload",
+          error: "UPLOAD_PROCESSING_ERROR"
+        });
+      }
     }
 
     res.setHeader('Allow', ['GET', 'POST']);
