@@ -1,9 +1,46 @@
 import { v4 as uuidv4 } from 'uuid';
 import db from './sqlite';
-import { MongoClient, Collection as MongoCollection, Db } from 'mongodb';
+import { MongoClient, Collection as MongoCollection, Db, Document } from 'mongodb';
 
 // MongoDB client for production environments
 let mongoClient: MongoClient | null = null;
+let isMongoMode = false;
+
+// Utility function to safely log objects without circular references
+export function safeLog(obj: any, label?: string): void {
+  try {
+    // For MongoDB client or cursors, just log a simplified version
+    if (
+      obj && typeof obj === 'object' && 
+      (
+        (obj.constructor && obj.constructor.name === 'MongoClient') ||
+        obj.s && obj.s.sessionPool
+      )
+    ) {
+      console.log(label || 'Object', '[MongoDB Client or Cursor - not serializable]');
+      return;
+    }
+    
+    // For other objects, try to stringify with a replacer function
+    const seen = new WeakSet();
+    const replacer = (key: string, value: any) => {
+      if (typeof value === 'object' && value !== null) {
+        if (seen.has(value)) {
+          return '[Circular]';
+        }
+        seen.add(value);
+      }
+      return value;
+    };
+    
+    const serialized = JSON.stringify(obj, replacer);
+    console.log(label || 'Object', serialized.length > 1000 
+      ? serialized.substring(0, 1000) + '... (truncated)' 
+      : serialized);
+  } catch (err) {
+    console.log(label || 'Object', '[Not serializable]');
+  }
+}
 
 // The Collection class mimics MongoDB collection operations
 export class SqliteCollection<T extends { _id?: string }> {
@@ -260,6 +297,22 @@ export class SqliteCollection<T extends { _id?: string }> {
 // Relations handler for many-to-many relationships
 export class Relations {
   static async linkDocumentToActivity(documentId: string, activityId: string): Promise<void> {
+    if (isMongoMode) {
+      // MongoDB implementation
+      const client = getDbClient();
+      const db = client.db("cluster0");
+      const activitiesCollection = db.collection("activities");
+      
+      // Update the activity to include the document ID
+      await activitiesCollection.updateOne(
+        { _id: activityId },
+        { $addToSet: { documentIds: documentId } }
+      );
+      
+      return;
+    }
+    
+    // SQLite implementation
     const stmt = db.prepare(`
       INSERT OR IGNORE INTO activity_documents (activity_id, document_id)
       VALUES (?, ?)
@@ -269,6 +322,22 @@ export class Relations {
   }
   
   static async unlinkDocumentFromActivity(documentId: string, activityId: string): Promise<void> {
+    if (isMongoMode) {
+      // MongoDB implementation
+      const client = getDbClient();
+      const db = client.db("cluster0");
+      const activitiesCollection = db.collection("activities");
+      
+      // Remove the document ID from the activity
+      await activitiesCollection.updateOne(
+        { _id: activityId },
+        { $pull: { documentIds: documentId } }
+      );
+      
+      return;
+    }
+    
+    // SQLite implementation
     const stmt = db.prepare(`
       DELETE FROM activity_documents
       WHERE activity_id = ? AND document_id = ?
@@ -277,7 +346,18 @@ export class Relations {
     stmt.run(activityId, documentId);
   }
   
-  static getDocumentsByActivityId(activityId: string): string[] {
+  static async getDocumentsByActivityId(activityId: string): Promise<string[]> {
+    if (isMongoMode) {
+      // MongoDB implementation
+      const client = getDbClient();
+      const db = client.db("cluster0");
+      const activitiesCollection = db.collection("activities");
+      
+      const activity = await activitiesCollection.findOne({ _id: activityId }) as Document;
+      return activity?.documentIds || [];
+    }
+    
+    // SQLite implementation
     const stmt = db.prepare(`
       SELECT document_id FROM activity_documents
       WHERE activity_id = ?
@@ -287,7 +367,19 @@ export class Relations {
     return rows.map(row => row.document_id);
   }
   
-  static getActivitiesByDocumentId(documentId: string): string[] {
+  static async getActivitiesByDocumentId(documentId: string): Promise<string[]> {
+    if (isMongoMode) {
+      // MongoDB implementation
+      const client = getDbClient();
+      const db = client.db("cluster0");
+      const activitiesCollection = db.collection("activities");
+      
+      const cursor = activitiesCollection.find({ documentIds: documentId });
+      const activities = await cursor.toArray() as Document[];
+      return activities.map((activity: Document) => activity._id as string);
+    }
+    
+    // SQLite implementation
     const stmt = db.prepare(`
       SELECT activity_id FROM activity_documents
       WHERE document_id = ?
@@ -308,10 +400,10 @@ export interface DbClient {
 // Export a database client with collections
 export function getDbClient(): DbClient {
   // In production on Vercel, use MongoDB if MONGODB_URI is set
-  const isVercel = process.env.VERCEL === '1';
   const mongodbUri = process.env.MONGODB_URI;
   
-  if (isVercel && mongodbUri) {
+  if (process.env.VERCEL === '1' && mongodbUri) {
+    isMongoMode = true;
     console.log('Using MongoDB in production on Vercel');
     
     if (!mongoClient) {
@@ -331,6 +423,7 @@ export function getDbClient(): DbClient {
   }
   
   // Otherwise use our SQLite implementation
+  isMongoMode = false;
   console.log('Using SQLite implementation');
   return {
     db: (dbName: string) => {
@@ -340,6 +433,11 @@ export function getDbClient(): DbClient {
       };
     }
   };
+}
+
+// Helper to check if we're in MongoDB mode
+export function isUsingMongo(): boolean {
+  return isMongoMode;
 }
 
 // Add new collection type for scene configurations

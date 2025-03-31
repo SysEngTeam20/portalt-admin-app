@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuth } from "@clerk/nextjs/server";
-import { getDbClient } from "@/lib/db";
+import { getDbClient, safeLog } from "@/lib/db";
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 
@@ -37,7 +37,7 @@ export default async function handler(
   // GET all activities
   if (req.method === 'GET') {
     try {
-      console.log('Query parameters:', req.query)
+      safeLog(req.query, 'Query parameters');
       let orgId: string | undefined;
       
       // First try to get orgId from query params
@@ -58,8 +58,9 @@ export default async function handler(
         return res.status(400).json({ message: "orgId is required either as a query parameter or through authentication" });
       }
 
-      const activities = await activitiesCollection.find({ orgId });
-      return res.status(200).json(activities);
+      const activitiesCursor = await activitiesCollection.find({ orgId });
+      const activitiesArray = await activitiesCursor.toArray();
+      return res.status(200).json(activitiesArray);
     } catch (error) {
       console.error("[ACTIVITIES_GET]", error);
       return res.status(500).json({ message: "Internal Error" });

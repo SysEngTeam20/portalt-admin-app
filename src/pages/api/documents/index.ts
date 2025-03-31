@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuth } from "@clerk/nextjs/server";
 import { v4 as uuidv4 } from 'uuid';
-import { getDbClient, Relations } from "@/lib/db";
+import { getDbClient, Relations, safeLog, isUsingMongo } from "@/lib/db";
 import { uploadDocument } from "@/lib/cos";
 import { IncomingForm } from 'formidable';
 import fs from 'fs';
@@ -40,17 +40,31 @@ export default async function handler(
       const db = client.db("cluster0");
       const documentsCollection = db.collection("documents");
 
-      let documents;
+      let documents = [];
       
       if (activityId) {
         // Get documents associated with the activity
-        const documentIds = Relations.getDocumentsByActivityId(activityId);
-        documents = documentIds.map(id => 
-          documentsCollection.findOne({ _id: id, orgId } as any)
-        ).filter(Boolean);
+        const documentIds = await Relations.getDocumentsByActivityId(activityId);
+        if (documentIds.length > 0) {
+          // If using MongoDB, fetch in batch
+          if (isUsingMongo()) {
+            const cursor = documentsCollection.find({ 
+              _id: { $in: documentIds },
+              orgId 
+            } as any);
+            documents = await cursor.toArray();
+          } else {
+            // For SQLite, fetch one by one
+            const promises = documentIds.map(id => 
+              documentsCollection.findOne({ _id: id, orgId } as any)
+            );
+            documents = (await Promise.all(promises)).filter(Boolean);
+          }
+        }
       } else {
         // Get all organization's documents
-        documents = documentsCollection.find({ orgId } as any);
+        const cursor = documentsCollection.find({ orgId } as any);
+        documents = await cursor.toArray();
       }
 
       return res.status(200).json(documents);
@@ -74,12 +88,12 @@ export default async function handler(
         return res.status(400).json({ message: "File is required" });
       }
 
-      console.log('Uploading file:', {
+      safeLog({
         name: file.originalFilename || 'unnamed-file',
         type: file.mimetype || 'application/octet-stream',
         size: fs.statSync(file.filepath).size,
         activityId
-      });
+      }, 'Uploading file');
 
       // Generate a safe filename
       const timestamp = Date.now();
@@ -114,39 +128,18 @@ export default async function handler(
 
       // If activityId provided, link the document to the activity
       if (activityId) {
-        // Update the document's activityIds array
-        document.activityIds.push(activityId);
-        await db.collection("documents").updateOne(
-          { _id: document._id },
-          { $set: { activityIds: document.activityIds } as any }
-        );
-        
-        // Create the relation in the join table
-        await Relations.linkDocumentToActivity(document._id, activityId);
-        
-        // Update the activity's documentIds array
-        const activitiesCollection = db.collection("activities");
-        interface ActivityDocument {
-          _id: string;
-          orgId: string;
-          documentIds?: string[];
-        }
-        
-        const activity = activitiesCollection.findOne({ 
-          _id: activityId, 
-          orgId 
-        } as any) as unknown as ActivityDocument;
-        
-        if (activity) {
-          if (!activity.documentIds) {
-            activity.documentIds = [];
-          }
-          activity.documentIds.push(document._id);
-          
-          await activitiesCollection.updateOne(
-            { _id: activityId },
-            { $set: { documentIds: activity.documentIds } as any }
+        try {
+          // Update the document's activityIds array
+          document.activityIds.push(activityId);
+          await db.collection("documents").updateOne(
+            { _id: document._id },
+            { $set: { activityIds: document.activityIds } as any }
           );
+          
+          // Create the relation in the join table
+          await Relations.linkDocumentToActivity(document._id, activityId);
+        } catch (linkError) {
+          console.error("[DOCUMENTS_API] Error linking document:", linkError);
         }
       }
 
