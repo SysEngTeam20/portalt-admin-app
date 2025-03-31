@@ -9,7 +9,16 @@ import fs from 'fs';
 // Disable the default body parser for this route since we're handling file uploads
 export const config = {
   api: {
-    bodyParser: false,
+    bodyParser: {
+      sizeLimit: '50mb',
+      // Only parse JSON requests, not multipart/form-data
+      bodyParser: (req: { headers: { [key: string]: string | string[] | undefined } }) => {
+        if (req.headers['content-type']?.includes('application/json')) {
+          return true;
+        }
+        return false;
+      }
+    },
   },
 };
 
@@ -72,7 +81,48 @@ export default async function handler(
     
     // POST upload new document
     else if (req.method === 'POST') {
-      // Parse the multipart form data
+      // Check if this is a direct registration (no file upload)
+      if (req.headers['content-type']?.includes('application/json')) {
+        const { filename, url, mimeType, activityId } = req.body;
+        
+        if (!filename || !url) {
+          return res.status(400).json({ 
+            message: "filename and url are required",
+            error: "MISSING_REQUIRED_FIELDS"
+          });
+        }
+
+        try {
+          const client = getDbClient();
+          const db = client.db("cluster0");
+
+          // Create document metadata
+          const document = {
+            _id: uuidv4(),
+            filename,
+            originalName: filename,
+            mimeType: mimeType || 'application/octet-stream',
+            size: 0, // Size not available for direct registration
+            url,
+            orgId,
+            activityIds: activityId ? [activityId] : [] as string[],
+            metadata: {},
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+
+          await db.collection("documents").insertOne(document);
+          return res.status(201).json(document);
+        } catch (error) {
+          console.error("[DOCUMENTS_API] Registration error:", error);
+          return res.status(500).json({ 
+            message: "Failed to register document",
+            error: "REGISTRATION_ERROR"
+          });
+        }
+      }
+
+      // Handle file upload (existing code)
       const { files, fields } = await parseForm(req);
       const fileEntry = files.file;
       const activityId = fields.activityId ? String(fields.activityId) : null;
@@ -112,10 +162,9 @@ export default async function handler(
       }, 'Uploading file');
 
       try {
-        // Generate a safe filename
-        const timestamp = Date.now();
+        // Use original filename, just ensure it's URL-safe
         const safeName = (file.originalFilename || 'unnamed-file').replace(/[^a-zA-Z0-9.-]/g, '_');
-        const uniqueFilename = `${timestamp}-${safeName}`;
+        const uniqueFilename = safeName;
 
         // Upload to COS
         const buffer = fs.readFileSync(file.filepath);

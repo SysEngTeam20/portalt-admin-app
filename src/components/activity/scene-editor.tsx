@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
+import { DirectUpload } from '@/components/direct-upload';
 
 interface Scene {
   id: string;
@@ -190,6 +191,57 @@ export function SceneEditor({ activity }: SceneEditorProps) {
     }
   };
 
+  const handleUploadComplete = async (fileUrl: string, fileName: string, fileSize: number) => {
+    setIsAddingArtifact(true);
+    try {
+      // Create a new artifact object
+      const newArtifact = {
+        object_id: crypto.randomUUID(),
+        modelUrl: fileUrl,
+        position: { x: 0, y: 0, z: 0 },
+        rotation: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 }
+      };
+
+      // First register the object in the assets collection
+      const response = await fetch('/api/assets', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: fileName,
+          url: fileUrl,
+          type: '3D Objects',
+          size: fileSize,
+          orgId: activity.orgId
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to register object in database');
+      }
+
+      // Then add the artifact to the scene
+      await handleAddArtifact(selectedScene || activity.scenes?.[0]?.id, newArtifact);
+
+      setShowAddModal(false);
+      toast({
+        title: "Success",
+        description: "Artifact added successfully",
+      });
+    } catch (error) {
+      console.error("Failed to add artifact:", error);
+      toast({
+        title: "Error",
+        description: "Failed to add artifact to scene",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAddingArtifact(false);
+    }
+  };
+
   // For VR activities, show the scene artifacts card directly
   if (activity.format === 'VR') {
     // Only show loading state if we haven't initialized the scene yet
@@ -209,6 +261,7 @@ export function SceneEditor({ activity }: SceneEditorProps) {
           onUpdateArtifact={handleUpdateArtifact}
           onRemoveArtifact={handleRemoveArtifact}
           sceneId={selectedScene || activity.scenes?.[0]?.id}
+          activity={activity}
         />
       </div>
     );
@@ -246,55 +299,64 @@ const SceneArtifactsCard = ({
   onAddArtifact,
   onUpdateArtifact,
   onRemoveArtifact,
-  sceneId
+  sceneId,
+  activity
 }: { 
   artifacts: ArtifactObject[] | undefined;
   onAddArtifact: (sceneId: string, artifact: any) => Promise<void>;
   onUpdateArtifact: (sceneId: string, objectId: string, updated: any) => Promise<void>;
   onRemoveArtifact: (sceneId: string, objectId: string) => Promise<void>;
   sceneId: string;
+  activity: Activity;
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedTab, setSelectedTab] = useState<'upload' | 'library'>('upload');
   const [isLoading, setIsLoading] = useState(false);
   const [isAddingArtifact, setIsAddingArtifact] = useState(false);
 
-  const handleFileUpload = async (file: File) => {
+  const handleUploadComplete = async (fileUrl: string, fileName: string, fileSize: number) => {
     setIsAddingArtifact(true);
     try {
-      // Check file size (50MB limit)
-      if (file.size > 50 * 1024 * 1024) {
-        toast({
-          title: "File Too Large",
-          description: "File size exceeds 50MB limit. Please choose a smaller file.",
-          variant: "destructive",
-        });
-        return;
-      }
+      // Create a new artifact object
+      const newArtifact = {
+        object_id: crypto.randomUUID(),
+        modelUrl: fileUrl,
+        position: { x: 0, y: 0, z: 0 },
+        rotation: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 }
+      };
 
-      // Step 1: Upload to assets
-      const assetFormData = new FormData();
-      assetFormData.append('file', file);
-      const assetResponse = await fetch('/api/assets', {
+      // First register the object in the assets collection
+      const response = await fetch('/api/assets', {
         method: 'POST',
-        body: assetFormData
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: fileName,
+          url: fileUrl,
+          type: '3D Objects',
+          size: fileSize,
+          orgId: activity.orgId
+        }),
       });
-      
-      if (!assetResponse.ok) throw new Error('Asset upload failed');
-      const { url } = await assetResponse.json();
 
-      // Verify URL format before saving
-      if (!url.startsWith('https://') || !url.includes('.cloud-object-storage')) {
-        throw new Error('Invalid model URL format');
+      if (!response.ok) {
+        throw new Error('Failed to register object in database');
       }
-      
-      await onAddArtifact(sceneId, { modelUrl: url });
-      setShowAddModal(false);
 
-    } catch (error) {
-      console.error("Upload failed:", error);
+      // Then add the artifact to the scene
+      await onAddArtifact(sceneId, newArtifact);
+
+      setShowAddModal(false);
       toast({
-        title: "Upload Error",
+        title: "Success",
+        description: "Artifact added successfully",
+      });
+    } catch (error) {
+      console.error("Failed to add artifact:", error);
+      toast({
+        title: "Error",
         description: "Failed to add artifact to scene",
         variant: "destructive",
       });
@@ -345,53 +407,13 @@ const SceneArtifactsCard = ({
                 
                 <TabsContent value="upload" className="mx-4">
                   <div className="space-y-6">
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center transition-colors hover:border-primary/50">
-                      <Input 
-                        type="file"
-                        id="file-upload"
-                        className="hidden"
+                    <div className="p-8 text-center">
+                      <DirectUpload
+                        onUploadComplete={handleUploadComplete}
                         accept=".glb,.gltf,.fbx,.obj,.dae,.3ds,.blend,.stl,.skp,.dxf"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            // Check file size (50MB limit)
-                            if (file.size > 50 * 1024 * 1024) {
-                              toast({
-                                title: "File Too Large",
-                                description: "File size exceeds 50MB limit. Please choose a smaller file.",
-                                variant: "destructive",
-                              });
-                              e.target.value = '';
-                              return;
-                            }
-                            await handleFileUpload(file);
-                          }
-                        }}
+                        label="Upload 3D Model"
+                        maxSize={1024 * 1024 * 1024} // 1GB
                       />
-                      <label 
-                        htmlFor="file-upload"
-                        className={`cursor-pointer flex flex-col items-center space-y-2 ${
-                          isAddingArtifact ? 'opacity-50 pointer-events-none' : ''
-                        }`}
-                      >
-                        {isAddingArtifact ? (
-                          <div className="flex flex-col items-center gap-2">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                            <p className="text-sm text-muted-foreground">
-                              Adding artifact to scene...
-                            </p>
-                          </div>
-                        ) : (
-                          <>
-                            <p className="text-sm text-muted-foreground">
-                              Drag and drop or click to upload
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Maximum file size: 50MB
-                            </p>
-                          </>
-                        )}
-                      </label>
                     </div>
                   </div>
                 </TabsContent>

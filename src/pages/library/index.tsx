@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Eye, Upload, Search, MoreVertical, FileBox, Image as ImageIcon, FileText, Box } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
+import { useAuth } from '@clerk/nextjs';
 
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
@@ -20,8 +22,10 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Asset, AssetType } from '@/types/asset';
+import { DirectUpload } from '@/components/direct-upload';
 
 // Utility function for formatting file sizes
 function formatFileSize(bytes: number): string {
@@ -32,16 +36,33 @@ function formatFileSize(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
+// Utility function to determine asset type from filename
+function getAssetType(filename: string): AssetType {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  if (!ext) return '3D Objects';
+
+  if (['glb', 'gltf', 'fbx', 'obj', 'dae', '3ds', 'blend', 'stl', 'skp', 'dxf'].includes(ext)) {
+    return '3D Objects';
+  } else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
+    return 'Images';
+  } else if (['pdf', 'doc', 'docx', 'txt'].includes(ext)) {
+    return 'RAG Documents';
+  }
+  return '3D Objects';
+}
+
 export default function LibraryPage() {
     const { toast } = useToast();
+    const { orgId } = useAuth();
     const [assets, setAssets] = useState<Asset[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    const [selectedTypes, setSelectedTypes] = useState<Set<AssetType>>(new Set()); // Removed default filter
+    const [selectedTypes, setSelectedTypes] = useState<Set<AssetType>>(new Set<AssetType>(['3D Objects', 'Images', 'RAG Documents'] as AssetType[]));
     const [sortBy, setSortBy] = useState<'uploadDate' | 'name' | 'size'>('uploadDate');
     const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
     const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
     const [newName, setNewName] = useState('');
+    const [dialogOpen, setDialogOpen] = useState(false);
   
   useEffect(() => {
     fetchAssets();
@@ -64,37 +85,39 @@ export default function LibraryPage() {
     }
   };
 
-  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files?.length) return;
-
-    const file = files[0];
-    // Check file size (50MB limit)
-    if (file.size > 50 * 1024 * 1024) {
+  const handleUploadComplete = async (fileUrl: string, fileName: string, fileSize: number) => {
+    if (!orgId) {
       toast({
-        title: "File Too Large",
-        description: "File size exceeds 50MB limit. Please choose a smaller file.",
+        title: "Error",
+        description: "Organization ID is required",
         variant: "destructive",
       });
-      event.target.value = '';
       return;
     }
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-
+      // Register the asset in the database
       const response = await fetch('/api/assets', {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: fileName,
+          url: fileUrl,
+          type: getAssetType(fileName),
+          size: fileSize,
+          orgId,
+        }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to upload asset');
+        throw new Error('Failed to register asset in database');
       }
-      
+
       const newAsset = await response.json();
+      
+      // Update local state with the new asset
       setAssets(prev => [newAsset, ...prev]);
       
       toast({
@@ -108,8 +131,6 @@ export default function LibraryPage() {
         description: error instanceof Error ? error.message : "Failed to upload asset. Please try again.",
         variant: "destructive",
       });
-    } finally {
-      event.target.value = '';
     }
   };
 
@@ -225,18 +246,30 @@ export default function LibraryPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Asset Library</h1>
-        <div>
-          <input
-            type="file"
-            id="fileUpload"
-            className="hidden"
-            onChange={handleUpload}
-          />
-          <Button onClick={() => document.getElementById('fileUpload')?.click()}>
-            <Upload className="h-4 w-4 mr-2" />
-            Upload
-          </Button>
-        </div>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Upload className="h-4 w-4 mr-2" />
+              Upload Asset
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Upload Asset</DialogTitle>
+            </DialogHeader>
+            <div className="pt-4">
+              <DirectUpload
+                onUploadComplete={(fileUrl, fileName, fileSize) => {
+                  handleUploadComplete(fileUrl, fileName, fileSize);
+                  setDialogOpen(false);
+                }}
+                accept=".glb,.gltf,.fbx,.obj,.dae,.3ds,.blend,.stl,.skp,.dxf,.jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.txt"
+                label="Choose File"
+                maxSize={1024 * 1024 * 1024} // 1GB
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Filters and Search */}

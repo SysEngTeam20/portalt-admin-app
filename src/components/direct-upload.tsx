@@ -1,76 +1,204 @@
 'use client';
 
-import { useState } from 'react';
-import { Upload } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Upload, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 
 interface DirectUploadProps {
-  onUploadComplete: (fileUrl: string, fileName: string) => Promise<void> | void;
+  onUploadComplete: (fileUrl: string, fileName: string, fileSize: number) => void;
   accept?: string;
   label?: string;
   maxSize?: number; // in bytes
 }
 
+// Utility function to format file size
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
 export function DirectUpload({ 
   onUploadComplete, 
-  accept = '*', 
+  accept = '*/*',
   label = 'Upload File',
-  maxSize = 50 * 1024 * 1024 // 50MB default
+  maxSize = 1024 * 1024 * 1024 // 1GB default
 }: DirectUploadProps) {
-  const [isUploading, setIsUploading] = useState(false);
   const { toast } = useToast();
-  const inputId = `direct-upload-${Math.random().toString(36).substr(2, 9)}`;
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) return;
 
     // Check file size
     if (file.size > maxSize) {
       toast({
-        title: "File Too Large",
-        description: `File size exceeds ${maxSize / (1024 * 1024)}MB limit. Please choose a smaller file.`,
+        title: "File too large",
+        description: `Maximum file size is ${formatFileSize(maxSize)}`,
         variant: "destructive",
       });
-      e.target.value = '';
       return;
     }
 
+    setIsUploading(true);
     try {
-      setIsUploading(true);
+      // Get presigned URL
+      console.log('Requesting presigned URL for file:', {
+        fileName: file.name,
+        contentType: file.type,
+        size: file.size
+      });
 
-      // Get pre-signed URL
       const presignedResponse = await fetch('/api/upload/presigned-url', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          filename: file.name,
+          fileName: file.name,
           contentType: file.type,
         }),
       });
 
       if (!presignedResponse.ok) {
-        throw new Error('Failed to get upload URL');
+        const errorText = await presignedResponse.text();
+        console.error('Failed to get presigned URL:', {
+          status: presignedResponse.status,
+          statusText: presignedResponse.statusText,
+          error: errorText,
+          headers: Object.fromEntries(presignedResponse.headers.entries())
+        });
+        throw new Error(`Failed to get upload URL: ${errorText}`);
       }
 
-      const { uploadUrl, key, publicUrl } = await presignedResponse.json();
+      let responseData;
+      try {
+        responseData = await presignedResponse.json();
+      } catch (error) {
+        console.error('Failed to parse presigned URL response:', {
+          error,
+          responseText: await presignedResponse.text()
+        });
+        throw new Error('Invalid response from server');
+      }
 
-      // Upload directly to COS
-      await fetch(uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: {
-          'Content-Type': file.type,
-        },
+      const { uploadUrl, publicUrl } = responseData;
+      if (!uploadUrl || !publicUrl) {
+        console.error('Invalid presigned URL response:', responseData);
+        throw new Error('Invalid response format from server');
+      }
+
+      console.log('Received presigned URL:', {
+        uploadUrl,
+        publicUrl,
+        key: uploadUrl.split('/').pop() // Extract key from URL for logging
       });
 
-      // Call the completion handler with the public URL from the server
-      await onUploadComplete(publicUrl, file.name);
+      // Upload directly to COS
+      console.log('Attempting upload to COS:', {
+        url: uploadUrl,
+        method: 'PUT',
+        contentType: file.type,
+        fileSize: file.size
+      });
 
+      // Use XMLHttpRequest for better CORS handling with PUT requests
+      await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percentComplete = (event.loaded / event.total) * 100;
+            console.log('Upload progress:', percentComplete.toFixed(2) + '%');
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            console.log('Upload successful');
+            resolve(xhr.response);
+          } else {
+            console.error('Upload failed:', {
+              status: xhr.status,
+              statusText: xhr.statusText,
+              response: xhr.response
+            });
+            reject(new Error(`Upload failed: ${xhr.statusText}`));
+          }
+        };
+
+        xhr.onerror = () => {
+          console.error('Upload error:', {
+            status: xhr.status,
+            statusText: xhr.statusText
+          });
+          reject(new Error('Upload failed'));
+        };
+
+        xhr.open('PUT', uploadUrl, true);
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+        xhr.withCredentials = false; // Important for CORS
+        xhr.send(file);
+      });
+
+      // Wait a moment for the upload to complete
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Verify the upload by checking if the file is accessible
+      try {
+        console.log('Verifying upload at URL:', publicUrl);
+        // Add retries for verification
+        let retries = 3;
+        let verified = false;
+        
+        while (retries > 0 && !verified) {
+          try {
+            const verifyResponse = await fetch(publicUrl, { 
+              method: 'HEAD',
+              mode: 'cors'
+            });
+            
+            if (verifyResponse.ok) {
+              verified = true;
+              console.log('Upload verification successful');
+            } else {
+              console.log(`Verification attempt ${4 - retries} failed, retrying...`);
+              retries--;
+              if (retries > 0) {
+                // Wait longer between each retry
+                await new Promise(resolve => setTimeout(resolve, 2000));
+              }
+            }
+          } catch (error) {
+            console.log(`Verification attempt ${4 - retries} failed with error:`, error);
+            retries--;
+            if (retries > 0) {
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          }
+        }
+
+        if (!verified) {
+          console.warn('Upload verification failed after all retries, but continuing anyway');
+          // Don't throw here - the file might still be accessible even if verification fails
+        }
+      } catch (error) {
+        console.error('Upload verification failed:', error);
+        // Don't throw here, just log the error
+        // The file might still be accessible even if verification fails
+      }
+
+      console.log('Upload successful');
+
+      // Call completion handler with the public URL and file size
+      onUploadComplete(publicUrl, file.name, file.size);
+      
       toast({
         title: "Success",
         description: "File uploaded successfully",
@@ -79,40 +207,48 @@ export function DirectUpload({
       console.error('Upload error:', error);
       toast({
         title: "Upload Failed",
-        description: error instanceof Error ? error.message : "Failed to upload file. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to upload file",
         variant: "destructive",
       });
     } finally {
       setIsUploading(false);
-      e.target.value = '';
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
   return (
-    <div className="flex flex-col gap-2">
-      <Input
-        id={inputId}
+    <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg hover:border-primary/50 transition-colors">
+      <input
         type="file"
-        accept={accept}
+        ref={fileInputRef}
         onChange={handleFileChange}
+        accept={accept}
         className="hidden"
         disabled={isUploading}
       />
-      <label htmlFor={inputId} className="w-full">
-        <Button
-          variant="outline"
-          className="w-full flex gap-2"
-          asChild
-          disabled={isUploading}
-        >
-          <div>
-            <Upload className="h-4 w-4" />
-            {isUploading ? 'Uploading...' : label}
-          </div>
-        </Button>
-      </label>
-      <p className="text-xs text-muted-foreground text-center">
-        Maximum file size: {maxSize / (1024 * 1024)}MB
+      <Button
+        variant="outline"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={isUploading}
+        className="w-full"
+      >
+        {isUploading ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Uploading...
+          </>
+        ) : (
+          <>
+            <Upload className="h-4 w-4 mr-2" />
+            {label}
+          </>
+        )}
+      </Button>
+      <p className="text-sm text-muted-foreground mt-2">
+        Max size: {formatFileSize(maxSize)}
       </p>
     </div>
   );

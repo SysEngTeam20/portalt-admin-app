@@ -18,6 +18,9 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Activity } from '@/types/activity';
 import { Document } from '@/types/document';
+import { DirectUpload } from '@/components/direct-upload';
+import { v4 as uuidv4 } from 'uuid';
+import { useAuth } from '@clerk/nextjs';
 
 interface RagPanelProps {
   activity: Activity;
@@ -25,7 +28,8 @@ interface RagPanelProps {
 
 export function RagPanel({ activity }: RagPanelProps) {
   const { toast } = useToast();
-  const [isEnabled, setIsEnabled] = useState(activity.ragEnabled);
+  const { orgId } = useAuth();
+  const [isEnabled, setIsEnabled] = useState(activity.ragEnabled || false);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [libraryDocuments, setLibraryDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -99,23 +103,31 @@ export function RagPanel({ activity }: RagPanelProps) {
     }
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    try {
-      const file = event.target.files?.[0];
-      if (!file) return;
-
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('activityId', activity._id);
-
-      const response = await fetch('/api/documents', {
-        method: 'POST',
-        body: formData,
+  const handleUploadComplete = async (fileUrl: string, fileName: string) => {
+    if (!orgId) {
+      toast({
+        title: "Error",
+        description: "Organization ID is required",
+        variant: "destructive",
       });
+      return;
+    }
 
-      if (!response.ok) throw new Error('Failed to upload document');
+    try {
+      const newDocument: Document = {
+        _id: uuidv4(),
+        filename: fileName,
+        originalName: fileName,
+        mimeType: 'application/octet-stream',
+        size: 0, // Size will be updated after upload
+        url: fileUrl,
+        orgId,
+        activityIds: [activity._id],
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
       
-      const newDocument = await response.json();
       setDocuments([...documents, newDocument]);
       await fetchLibraryDocuments();
       setDialogOpen(false);
@@ -235,40 +247,15 @@ export function RagPanel({ activity }: RagPanelProps) {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid grid-cols-2 gap-4 pt-4">
-                  {/* Upload Option - unchanged */}
-                  <Button
-                    variant="outline"
-                    className="h-32 flex flex-col items-center justify-center gap-2"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Upload className="h-8 w-8" />
-                    <span>Upload New</span>
-                    <span className="text-xs text-muted-foreground">Max 50MB</span>
-                  </Button>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    className="hidden"
+                  {/* Upload Option */}
+                  <DirectUpload
+                    onUploadComplete={handleUploadComplete}
                     accept=".pdf,.doc,.docx,.txt"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        // Check file size (50MB limit)
-                        if (file.size > 50 * 1024 * 1024) {
-                          toast({
-                            title: "File Too Large",
-                            description: "File size exceeds 50MB limit. Please choose a smaller file.",
-                            variant: "destructive",
-                          });
-                          e.target.value = '';
-                          return;
-                        }
-                        await handleFileUpload(e);
-                      }
-                    }}
+                    label="Upload Document"
+                    maxSize={1024 * 1024 * 1024} // 1GB
                   />
 
-                  {/* Select from Library Option - unchanged */}
+                  {/* Select from Library Option */}
                   <Button
                     variant="outline"
                     className="h-32 flex flex-col items-center justify-center gap-2"

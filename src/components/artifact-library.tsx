@@ -44,11 +44,11 @@ export function ArtifactLibrary({ onSelect }: ArtifactLibraryProps) {
           <Button
             key={asset._id}
             variant="outline"
-            className="h-24 flex flex-col items-center justify-center"
+            className="h-24 w-full flex flex-col items-center justify-center p-2"
             onClick={() => onSelect({ modelUrl: asset.url })}
           >
-            <span className="text-sm truncate">{asset.name}</span>
-            <span className="text-xs text-gray-500">{asset.type}</span>
+            <span className="text-sm truncate w-full text-center">{asset.name}</span>
+            <span className="text-xs text-gray-500 mt-1">{asset.type}</span>
           </Button>
         ))
       )}

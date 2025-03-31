@@ -36,7 +36,7 @@
     "electron": "^35.0.0",
     "electron-serve": "^2.1.1",
     "formidable": "^3.5.2",
-    "ibm-cos-sdk": "^1.14.0",
+    "ibm-cos-sdk": "^1.14.1",
     "jose": "^5.9.6",
     "lucide-react": "^0.469.0",
     "mongodb": "^6.12.0",

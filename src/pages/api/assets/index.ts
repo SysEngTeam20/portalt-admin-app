@@ -10,7 +10,16 @@ import fs from 'fs';
 // Disable the default body parser for this route since we're handling file uploads
 export const config = {
   api: {
-    bodyParser: false,
+    bodyParser: {
+      sizeLimit: '50mb',
+      // Only parse JSON requests, not multipart/form-data
+      bodyParser: (req: { headers: { [key: string]: string | string[] | undefined } }) => {
+        if (req.headers['content-type']?.includes('application/json')) {
+          return true;
+        }
+        return false;
+      }
+    },
   },
 };
 
@@ -101,6 +110,41 @@ export default async function handler(
 
     // POST upload new asset
     if (req.method === 'POST') {
+      // Check if this is a direct registration (no file upload)
+      if (req.headers['content-type']?.includes('application/json')) {
+        const { name, url, type, size, orgId } = req.body;
+        
+        if (!name || !url || !type || !orgId) {
+          return res.status(400).json({ 
+            message: "name, url, type, and orgId are required",
+            error: "MISSING_REQUIRED_FIELDS"
+          });
+        }
+
+        try {
+          const newAsset: AssetDocument = {
+            _id: uuidv4(),
+            name,
+            type,
+            size: size || 0,
+            url,
+            orgId,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+
+          await db.collection<AssetDocument>("assets").insertOne(newAsset);
+          return res.status(201).json(newAsset);
+        } catch (error) {
+          console.error("[ASSETS_API] Registration error:", error);
+          return res.status(500).json({ 
+            message: "Failed to register asset",
+            error: "REGISTRATION_ERROR"
+          });
+        }
+      }
+
+      // Handle file upload (existing code)
       const { fields, files } = await parseForm(req);
       const file = Array.isArray(files.file) ? files.file[0] : files.file;
       
