@@ -2,7 +2,11 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  /* config options here */
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb'
+    }
+  }
 };
 
 export default nextConfig;
