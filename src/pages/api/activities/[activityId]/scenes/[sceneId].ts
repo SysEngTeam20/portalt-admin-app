@@ -74,9 +74,11 @@ export default async function handler(
           return res.status(401).json({ message: "Unauthorized" });
         }
 
+        // Remove _id and any other immutable fields from the update
+        const { _id, ...updateData } = req.body;
         await scenesCollection.updateOne(
           { _id: sceneId, orgId },
-          { $set: { ...req.body, updatedAt: new Date() } }
+          { $set: { ...updateData, updatedAt: new Date() } }
         );
         return res.status(200).json({ success: true });
       }

@@ -87,9 +87,11 @@ export default async function handler(
           await collection.insertOne(newConfig);
           return res.status(200).json(newConfig);
         } else {
+          // Remove _id and any other immutable fields from the update
+          const { _id, ...updateData } = req.body;
           const updatedConfig = {
             ...existing,
-            ...req.body,
+            ...updateData,
             updatedAt: new Date()
           };
           console.log("[SCENE_CONFIG_API] Updating config:", updatedConfig);

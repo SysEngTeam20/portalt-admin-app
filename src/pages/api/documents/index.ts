@@ -133,7 +133,7 @@ export default async function handler(
           document.activityIds.push(activityId);
           await db.collection("documents").updateOne(
             { _id: document._id },
-            { $set: { activityIds: document.activityIds } as any }
+            { $set: { activityIds: document.activityIds, updatedAt: new Date() } }
           );
           
           // Create the relation in the join table
