@@ -25,7 +25,7 @@ export default function MyApp({ Component, pageProps }: AppProps) {
   return (
     <ClerkProvider {...pageProps}>
       <Head>
-        <title>XR Learning Platform</title>
+        <title>Portalt</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
       
