@@ -9,4 +9,10 @@ files:
     filter:
       - package.json
       - app
-publish: null 
+publish: null
+mac:
+  icon: resources/icon.icns
+win:
+  icon: resources/icon.ico
+linux:
+  icon: resources/icon.png 
