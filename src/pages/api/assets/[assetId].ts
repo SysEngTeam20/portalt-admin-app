@@ -34,6 +34,8 @@ function extractKeyFromUrl(url: string): string {
       if (key.startsWith('useruploads/')) {
         key = key.substring('useruploads/'.length);
       }
+      // Decode URL-encoded characters
+      key = decodeURIComponent(key);
       console.log("[ASSET_API] Extracted key:", key);
       return key;
     }
@@ -51,6 +53,8 @@ function extractKeyFromUrl(url: string): string {
         if (key.startsWith('useruploads/')) {
           key = key.substring('useruploads/'.length);
         }
+        // Decode URL-encoded characters
+        key = decodeURIComponent(key);
         console.log("[ASSET_API] Manually extracted key:", key);
         return key;
       }
