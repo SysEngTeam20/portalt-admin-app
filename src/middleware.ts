@@ -8,7 +8,9 @@ const isPublicRoute = createRouteMatcher([
   '/api/llm/(.*)',
   '/api/scenes-configuration/(.*)',
   '/api/pairing/(.*)',
-  '/api/public/activity-join(.*)'
+  '/api/public/activity-join(.*)',
+  '/api/activities/(.*)',
+  '/api/scenes/(.*)'
 ])
 
 export default clerkMiddleware(async (auth, req) => {
