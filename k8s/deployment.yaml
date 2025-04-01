@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portalt-admin
+  namespace: portalt
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: portalt-admin
+  template:
+    metadata:
+      labels:
+        app: portalt-admin
+    spec:
+      containers:
+      - name: portalt-admin
+        image: portalt-admin:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: portalt-secrets
+              key: clerk-publishable-key
+        - name: CLERK_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: portalt-secrets
+              key: clerk-secret-key
+        - name: COS_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: portalt-secrets
+              key: cos-endpoint
+        - name: COS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: portalt-secrets
+              key: cos-access-key-id
+        - name: COS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: portalt-secrets
+              key: cos-secret-access-key
+        - name: COS_BUCKET_NAME
+          valueFrom:
+            secretKeyRef:
+              name: portalt-secrets
+              key: cos-bucket-name
+        - name: COS_INSTANCE_CRN
+          valueFrom:
+            secretKeyRef:
+              name: portalt-secrets
+              key: cos-instance-crn
+        - name: IBM_CLOUD_REGION
+          valueFrom:
+            secretKeyRef:
+              name: portalt-secrets
+              key: ibm-cloud-region
+        - name: API_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: portalt-secrets
+              key: api-secret-key
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi" 

@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: portalt-admin
+  namespace: portalt
+spec:
+  selector:
+    app: portalt-admin
+  ports:
+  - port: 80
+    targetPort: 3000
+  type: LoadBalancer 
