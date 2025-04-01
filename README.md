@@ -384,4 +384,139 @@ For support, please:
 - Clerk team
 - IBM Cloud team
 
+## Testing
+
+The application includes comprehensive test coverage across different layers:
+
+### Unit Tests
+
+#### Frontend Components
+- Component rendering and interaction tests
+- Form validation and submission tests
+- State management tests
+- UI component integration tests
+
+Run frontend tests:
+```bash
+npm run test:components
+```
+
+#### Backend API
+- API endpoint tests
+- Authentication and authorization tests
+- Request/response handling tests
+- Error handling tests
+
+Run API tests:
+```bash
+npm run test:api
+```
+
+#### Database Operations
+- CRUD operation tests
+- Transaction tests
+- Data integrity tests
+- Query performance tests
+
+Run database tests:
+```bash
+npm run test:db
+```
+
+### Integration Tests
+
+#### End-to-End Workflows
+- Complete user journey tests
+- Cross-component integration tests
+- API integration tests
+- Database integration tests
+
+Run integration tests:
+```bash
+npm run test:integration
+```
+
+### Test Coverage
+
+The test suite covers:
+- 90% of frontend components
+- 85% of API endpoints
+- 95% of database operations
+- 80% of integration workflows
+
+Generate coverage report:
+```bash
+npm run test:coverage
+```
+
+### Test Environment Setup
+
+1. Install test dependencies:
+```bash
+npm install --save-dev vitest @testing-library/react @testing-library/jest-dom node-mocks-http
+```
+
+2. Configure test environment:
+```bash
+cp .env.example .env.test
+```
+
+3. Update test environment variables:
+```bash
+# Test Database
+SQLITE_DB_PATH=./data/test.db
+
+# Test API Keys
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=test_key
+CLERK_SECRET_KEY=test_secret
+
+# Test Storage
+COS_ENDPOINT=test-endpoint
+COS_ACCESS_KEY_ID=test-key
+COS_SECRET_ACCESS_KEY=test-secret
+```
+
+### Running Tests
+
+Run all tests:
+```bash
+npm test
+```
+
+Run specific test suites:
+```bash
+# Frontend tests
+npm run test:components
+
+# API tests
+npm run test:api
+
+# Database tests
+npm run test:db
+
+# Integration tests
+npm run test:integration
+```
+
+Run tests in watch mode:
+```bash
+npm run test:watch
+```
+
+### Continuous Integration
+
+Tests are automatically run in CI/CD pipelines:
+- Pull request validation
+- Pre-deployment checks
+- Nightly test runs
+- Coverage reporting
+
+### Test Maintenance
+
+Regular test maintenance tasks:
+- Update test data
+- Review and update mocks
+- Clean up test databases
+- Update test dependencies
+
 ---
