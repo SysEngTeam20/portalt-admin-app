@@ -10,6 +10,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/pairing/(.*)',
   '/api/public/activity-join(.*)',
   '/api/activities/(.*)',
+  '/api/activities',
   '/api/scenes/(.*)'
 ])
 
