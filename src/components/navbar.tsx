@@ -16,7 +16,7 @@ export function Navbar() {
   return (
     <>
       <div className=" font-bold px-10 top-0 left-0 right-0 bg-blue-600 text-white text-center py-2 text-sm">
-        Ubiq VR Activities server deployed on 18.207.125.50:8009. Please enter this value in visitor VR client to join multiplayer & AI server.
+        Ubiq VR Activities server deployed on [Incoming]. Please enter this value in visitor VR client to join multiplayer & AI server.
       </div>
       <nav className="border-b bg-white">
         <div className="mx-auto max-w-7xl px-4">
