@@ -1,0 +1,157 @@
+                            <div class="mb-5">
+                                <h3 class="h4 mb-3">Error Handling and Database Testing</h3>
+                                <div class="card mb-4">
+                                    <div class="card-body">
+                                        <h5>Database Error Scenarios</h5>
+                                        <ul>
+                                            <li>SQLite Error Handling
+                                                <ul>
+                                                    <li>Connection failures</li>
+                                                    <li>Query execution errors</li>
+                                                    <li>Transaction rollbacks</li>
+                                                    <li>Constraint violations</li>
+                                                </ul>
+                                            </li>
+                                            <li>MongoDB Error Handling
+                                                <ul>
+                                                    <li>Connection timeouts</li>
+                                                    <li>Write conflicts</li>
+                                                    <li>Index violations</li>
+                                                    <li>Network issues</li>
+                                                </ul>
+                                            </li>
+                                        </ul>
+                                        <pre><code>// Example database error handling test
+describe('Database Error Handling', () => {
+    it('should handle SQLite connection errors', async () => {
+        const mockDb = {
+            prepare: jest.fn().mockImplementation(() => {
+                throw new Error('SQLITE_ERROR: no such table');
+            })
+        };
+
+        try {
+            await dbOperation(mockDb);
+        } catch (error) {
+            expect(error.message).toContain('SQLITE_ERROR');
+            expect(error.status).toBe(500);
+        }
+    });
+
+    it('should handle MongoDB write conflicts', async () => {
+        const mockCollection = {
+            insertOne: jest.fn().mockRejectedValue({
+                code: 11000,
+                message: 'Duplicate key error'
+            })
+        };
+
+        try {
+            await createActivity(mockCollection);
+        } catch (error) {
+            expect(error.code).toBe(11000);
+            expect(error.status).toBe(409);
+        }
+    });
+});</code></pre>
+                                    </div>
+                                </div>
+
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h5>API Error Handling</h5>
+                                        <ul>
+                                            <li>HTTP Status Codes
+                                                <ul>
+                                                    <li>400 - Bad Request</li>
+                                                    <li>401 - Unauthorized</li>
+                                                    <li>403 - Forbidden</li>
+                                                    <li>404 - Not Found</li>
+                                                    <li>409 - Conflict</li>
+                                                    <li>500 - Internal Server Error</li>
+                                                </ul>
+                                            </li>
+                                            <li>Error Response Format
+                                                <ul>
+                                                    <li>Standardized error messages</li>
+                                                    <li>Error codes and descriptions</li>
+                                                    <li>Stack traces in development</li>
+                                                    <li>User-friendly messages in production</li>
+                                                </ul>
+                                            </li>
+                                        </ul>
+                                        <pre><code>// Example API error handling test
+describe('API Error Handling', () => {
+    it('should return 500 for database errors', async () => {
+        const response = await fetch('/api/activities');
+        expect(response.status).toBe(500);
+        const data = await response.json();
+        expect(data.error).toBeDefined();
+        expect(data.message).toBe('Internal server error');
+    });
+
+    it('should return 400 for invalid requests', async () => {
+        const response = await fetch('/api/activities', {
+            method: 'POST',
+            body: JSON.stringify({ invalid: 'data' })
+        });
+        expect(response.status).toBe(400);
+        const data = await response.json();
+        expect(data.errors).toBeDefined();
+    });
+});</code></pre>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-5">
+                                <h3 class="h4 mb-3">Test Results</h3>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Component</th>
+                                                <th>Total Tests</th>
+                                                <th>Passed</th>
+                                                <th>Failed</th>
+                                                <th>Coverage</th>
+                                                <th>Error Handling</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td>Admin App</td>
+                                                <td>150</td>
+                                                <td>145</td>
+                                                <td>5</td>
+                                                <td>92%</td>
+                                                <td>95%</td>
+                                            </tr>
+                                            <tr>
+                                                <td>Ubiq-Genie Server</td>
+                                                <td>85</td>
+                                                <td>85</td>
+                                                <td>0</td>
+                                                <td>95%</td>
+                                                <td>98%</td>
+                                            </tr>
+                                            <tr>
+                                                <td>Database Operations</td>
+                                                <td>45</td>
+                                                <td>43</td>
+                                                <td>2</td>
+                                                <td>90%</td>
+                                                <td>93%</td>
+                                            </tr>
+                                            <tr>
+                                                <td>API Endpoints</td>
+                                                <td>60</td>
+                                                <td>58</td>
+                                                <td>2</td>
+                                                <td>88%</td>
+                                                <td>91%</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div> 

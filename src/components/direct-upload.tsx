@@ -88,8 +88,8 @@ export function DirectUpload({
         throw new Error('Invalid response from server');
       }
 
-      const { uploadUrl, publicUrl } = responseData;
-      if (!uploadUrl || !publicUrl) {
+      const { uploadUrl, publicUrl, key } = responseData;
+      if (!uploadUrl || !publicUrl || !key) {
         console.error('Invalid presigned URL response:', responseData);
         throw new Error('Invalid response format from server');
       }
@@ -150,36 +150,39 @@ export function DirectUpload({
       // Wait a moment for the upload to complete
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Verify the upload by checking if the file is accessible
+      // Verify the upload by checking if the file exists in COS
       try {
-        console.log('Verifying upload at URL:', publicUrl);
-        // Add retries for verification
-        let retries = 3;
+        console.log('Verifying upload with key:', key);
+        // Add retries for verification with increasing delays
+        let retries = 5;
         let verified = false;
         
         while (retries > 0 && !verified) {
           try {
-            const verifyResponse = await fetch(publicUrl, { 
-              method: 'HEAD',
-              mode: 'cors'
+            const verifyResponse = await fetch('/api/upload/verify', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ key }),
             });
             
             if (verifyResponse.ok) {
               verified = true;
               console.log('Upload verification successful');
             } else {
-              console.log(`Verification attempt ${4 - retries} failed, retrying...`);
+              console.log(`Verification attempt ${6 - retries} failed, retrying...`);
               retries--;
               if (retries > 0) {
-                // Wait longer between each retry
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                // Wait longer between each retry (2s, 4s, 8s, 16s, 32s)
+                await new Promise(resolve => setTimeout(resolve, 2000 * Math.pow(2, 5 - retries)));
               }
             }
           } catch (error) {
-            console.log(`Verification attempt ${4 - retries} failed with error:`, error);
+            console.log(`Verification attempt ${6 - retries} failed with error:`, error);
             retries--;
             if (retries > 0) {
-              await new Promise(resolve => setTimeout(resolve, 2000));
+              await new Promise(resolve => setTimeout(resolve, 2000 * Math.pow(2, 5 - retries)));
             }
           }
         }

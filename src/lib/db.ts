@@ -100,6 +100,24 @@ export class SqliteCollection<T extends { _id?: string }> {
   // Find a single document by query - MongoDB compatible
   async findOne(query: any): Promise<T | null> {
     try {
+      // Special case for _id query - use the primary key directly
+      if (query._id && Object.keys(query).length === 1) {
+        console.log('[SQLite] Looking up document by _id:', query._id);
+        const stmt = db.prepare(`
+          SELECT data FROM ${this.tableName}
+          WHERE id = ?
+        `);
+        
+        const row = stmt.get(query._id) as { data: string } | undefined;
+        
+        if (!row) {
+          console.log('[SQLite] No document found with _id:', query._id);
+          return null;
+        }
+        
+        return JSON.parse(row.data) as T;
+      }
+      
       // Build WHERE clause using JSON_EXTRACT for each query parameter
       const conditions = Object.keys(query)
         .map(key => `json_extract(data, '$.${key}') = ?`)
@@ -138,7 +156,7 @@ export class SqliteCollection<T extends { _id?: string }> {
   }
 
   // Internal implementation for find
-  private findDocuments(query: Partial<T> = {}): T[] {
+  private findDocuments(query: any = {}): T[] {
     try {
       let stmt;
       let rows;
@@ -147,14 +165,40 @@ export class SqliteCollection<T extends { _id?: string }> {
         // If no query, get all documents
         stmt = db.prepare(`SELECT data FROM ${this.tableName}`);
         rows = stmt.all() as { data: string }[];
-      } else {
-        // If query exists, filter documents
+      } else if (query._id && typeof query._id === 'object' && query._id.$in && Array.isArray(query._id.$in)) {
+        // Handle $in queries for _id field (common MongoDB pattern)
+        const idList = query._id.$in as string[];
+        const placeholders = idList.map(() => '?').join(',');
         stmt = db.prepare(`
           SELECT data FROM ${this.tableName}
-          WHERE data LIKE ?
+          WHERE id IN (${placeholders})
         `);
-        const queryStr = this.createQueryString(query);
-        rows = stmt.all(`%${queryStr}%`) as { data: string }[];
+        rows = stmt.all(...idList) as { data: string }[];
+        console.log(`[SQLite] Found ${rows.length} documents matching _id in list of ${idList.length}`);
+      } else if (query._id && typeof query._id === 'string') {
+        // Direct _id lookup
+        stmt = db.prepare(`
+          SELECT data FROM ${this.tableName}
+          WHERE id = ?
+        `);
+        rows = stmt.all(query._id) as { data: string }[];
+      } else {
+        // If query exists, filter documents using JSON extraction
+        // First, build WHERE conditions for each field
+        const conditions = [];
+        const values = [];
+        
+        for (const [key, value] of Object.entries(query)) {
+          conditions.push(`json_extract(data, '$.${key}') = ?`);
+          values.push(value);
+        }
+        
+        const whereClause = conditions.join(' AND ');
+        stmt = db.prepare(`
+          SELECT data FROM ${this.tableName}
+          WHERE ${whereClause}
+        `);
+        rows = stmt.all(...values) as { data: string }[];
       }
       
       return rows.map(row => JSON.parse(row.data) as T);
@@ -296,6 +340,116 @@ export class SqliteCollection<T extends { _id?: string }> {
 
 // Relations handler for many-to-many relationships
 export class Relations {
+  static async getDocumentsByActivityId(activityId: string): Promise<string[]> {
+    if (isMongoMode) {
+      // MongoDB implementation
+      const client = getDbClient();
+      const db = client.db("cluster0");
+      const activitiesCollection = db.collection("activities");
+      
+      const activity = await activitiesCollection.findOne({ _id: activityId }) as Document;
+      return activity?.documentIds || [];
+    }
+    
+    // SQLite implementation
+    try {
+      console.log('[RELATIONS] Getting documents for activity:', activityId);
+      
+      // First check if the activity_documents table exists
+      const tableCheck = db.prepare(`
+        SELECT name FROM sqlite_master 
+        WHERE type='table' AND name='activity_documents'
+      `).get();
+      
+      if (!tableCheck) {
+        console.log('[RELATIONS] The activity_documents table does not exist, creating it');
+        // Create the table if it doesn't exist
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS activity_documents (
+            activity_id TEXT NOT NULL,
+            document_id TEXT NOT NULL,
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
+            PRIMARY KEY (activity_id, document_id)
+          )
+        `);
+        return []; // No documents yet since the table was just created
+      }
+      
+      // Now try to get documents
+      try {
+        // First check if the created_at column exists
+        const colCheck = db.prepare(`PRAGMA table_info(activity_documents)`).all();
+        const hasCreatedAt = colCheck.some((col: any) => col.name === 'created_at');
+        
+        let stmt;
+        if (hasCreatedAt) {
+          console.log('[RELATIONS] Using query with created_at ordering');
+          stmt = db.prepare(`
+            SELECT document_id FROM activity_documents
+            WHERE activity_id = ?
+            ORDER BY created_at DESC
+          `);
+        } else {
+          console.log('[RELATIONS] Using simple query without created_at');
+          stmt = db.prepare(`
+            SELECT document_id FROM activity_documents
+            WHERE activity_id = ?
+          `);
+        }
+        
+        const rows = stmt.all(activityId) as { document_id: string }[];
+        console.log(`[RELATIONS] Found ${rows.length} documents:`, rows);
+        
+        return rows.map(row => row.document_id);
+      } catch (queryError) {
+        console.error("[RELATIONS] Error querying documents:", queryError);
+        
+        // One last try with the simplest possible query
+        try {
+          const stmt = db.prepare(`
+            SELECT * FROM activity_documents
+            WHERE activity_id = ?
+          `);
+          
+          const rows = stmt.all(activityId) as any[];
+          console.log('[RELATIONS] Fallback query results:', rows);
+          
+          if (rows.length > 0 && rows[0].document_id) {
+            return rows.map(row => row.document_id);
+          } else if (rows.length > 0) {
+            // Try to extract document_id from whatever structure we got
+            console.log('[RELATIONS] Unusual row structure, trying to extract document_id');
+            const documentIds = rows
+              .map(row => {
+                const keys = Object.keys(row);
+                const possibleKey = keys.find(k => 
+                  k.toLowerCase().includes('document') || 
+                  k.toLowerCase().includes('doc')
+                );
+                return possibleKey ? row[possibleKey] : null;
+              })
+              .filter(Boolean);
+              
+            if (documentIds.length > 0) {
+              console.log('[RELATIONS] Extracted document IDs:', documentIds);
+              return documentIds;
+            }
+          }
+          
+          // If we got here, we couldn't extract any document IDs
+          console.log('[RELATIONS] No document IDs could be extracted from the results');
+          return [];
+        } catch (finalError) {
+          console.error("[RELATIONS] Critical error getting documents:", finalError);
+          return [];
+        }
+      }
+    } catch (error) {
+      console.error("[RELATIONS] Error getting documents:", error);
+      return [];
+    }
+  }
+  
   static async linkDocumentToActivity(documentId: string, activityId: string): Promise<void> {
     if (isMongoMode) {
       // MongoDB implementation
@@ -313,12 +467,51 @@ export class Relations {
     }
     
     // SQLite implementation
-    const stmt = db.prepare(`
-      INSERT OR IGNORE INTO activity_documents (activity_id, document_id)
-      VALUES (?, ?)
-    `);
-    
-    stmt.run(activityId, documentId);
+    try {
+      console.log('[RELATIONS] Linking document to activity:', { documentId, activityId });
+      
+      // First, verify the activity and document exist
+      const activityStmt = db.prepare(`
+        SELECT id FROM activities
+        WHERE id = ?
+      `);
+      const activity = activityStmt.get(activityId);
+      
+      if (!activity) {
+        console.error('[RELATIONS] Activity not found:', activityId);
+        return;
+      }
+      
+      const documentStmt = db.prepare(`
+        SELECT id FROM documents
+        WHERE id = ?
+      `);
+      const document = documentStmt.get(documentId);
+      
+      if (!document) {
+        console.error('[RELATIONS] Document not found:', documentId);
+        return;
+      }
+      
+      // Now create the relation
+      const stmt = db.prepare(`
+        INSERT OR IGNORE INTO activity_documents (activity_id, document_id, created_at)
+        VALUES (?, ?, ?)
+      `);
+      
+      stmt.run(activityId, documentId, Date.now());
+      console.log('[RELATIONS] Successfully linked document to activity');
+    } catch (error) {
+      console.error("[RELATIONS] Error linking document:", error);
+      // If created_at column doesn't exist, try without it
+      const stmt = db.prepare(`
+        INSERT OR IGNORE INTO activity_documents (activity_id, document_id)
+        VALUES (?, ?)
+      `);
+      
+      stmt.run(activityId, documentId);
+      console.log('[RELATIONS] Successfully linked document to activity (fallback)');
+    }
   }
   
   static async unlinkDocumentFromActivity(documentId: string, activityId: string): Promise<void> {
@@ -346,27 +539,6 @@ export class Relations {
     stmt.run(activityId, documentId);
   }
   
-  static async getDocumentsByActivityId(activityId: string): Promise<string[]> {
-    if (isMongoMode) {
-      // MongoDB implementation
-      const client = getDbClient();
-      const db = client.db("cluster0");
-      const activitiesCollection = db.collection("activities");
-      
-      const activity = await activitiesCollection.findOne({ _id: activityId }) as Document;
-      return activity?.documentIds || [];
-    }
-    
-    // SQLite implementation
-    const stmt = db.prepare(`
-      SELECT document_id FROM activity_documents
-      WHERE activity_id = ?
-    `);
-    
-    const rows = stmt.all(activityId) as { document_id: string }[];
-    return rows.map(row => row.document_id);
-  }
-  
   static async getActivitiesByDocumentId(documentId: string): Promise<string[]> {
     if (isMongoMode) {
       // MongoDB implementation
@@ -380,13 +552,88 @@ export class Relations {
     }
     
     // SQLite implementation
-    const stmt = db.prepare(`
-      SELECT activity_id FROM activity_documents
-      WHERE document_id = ?
-    `);
+    try {
+      // First try with created_at ordering
+      const stmt = db.prepare(`
+        SELECT activity_id FROM activity_documents
+        WHERE document_id = ?
+        ORDER BY created_at DESC
+      `);
+      
+      const rows = stmt.all(documentId) as { activity_id: string }[];
+      return rows.map(row => row.activity_id);
+    } catch (error) {
+      // If created_at column doesn't exist, fall back to simple query
+      const stmt = db.prepare(`
+        SELECT activity_id FROM activity_documents
+        WHERE document_id = ?
+      `);
+      
+      const rows = stmt.all(documentId) as { activity_id: string }[];
+      return rows.map(row => row.activity_id);
+    }
+  }
+  
+  // Force link document to activity - more robust version that ensures linking works
+  static async forceLinkDocumentToActivity(documentId: string, activityId: string): Promise<void> {
+    console.log('[RELATIONS] Force-linking document to activity:', { documentId, activityId });
     
-    const rows = stmt.all(documentId) as { activity_id: string }[];
-    return rows.map(row => row.activity_id);
+    if (isMongoMode) {
+      // For MongoDB, use the normal method
+      return this.linkDocumentToActivity(documentId, activityId);
+    }
+    
+    // For SQLite, use a more direct approach that doesn't rely on verification
+    try {
+      // Create the activity_documents table if it doesn't exist (just to be sure)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS activity_documents (
+          activity_id TEXT NOT NULL,
+          document_id TEXT NOT NULL,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
+          PRIMARY KEY (activity_id, document_id)
+        )
+      `);
+      
+      // Insert with the REPLACE strategy to avoid duplicates
+      const stmt = db.prepare(`
+        INSERT OR REPLACE INTO activity_documents (activity_id, document_id, created_at)
+        VALUES (?, ?, ?)
+      `);
+      
+      stmt.run(activityId, documentId, Date.now());
+      
+      // Also update the document data with the activityId (if possible)
+      try {
+        const updateStmt = db.prepare(`
+          UPDATE documents 
+          SET data = json_set(data, '$.activityIds', json_array(?))
+          WHERE id = ?
+        `);
+        updateStmt.run(activityId, documentId);
+      } catch (err) {
+        // If updating the document data fails, log but continue
+        console.error('[RELATIONS] Could not update document activityIds:', err);
+      }
+      
+      console.log('[RELATIONS] Force-link successful');
+    } catch (error) {
+      console.error("[RELATIONS] Error in force-linking document:", error);
+      
+      // Last resort - try the simplest possible statement
+      try {
+        const stmt = db.prepare(`
+          INSERT OR IGNORE INTO activity_documents (activity_id, document_id)
+          VALUES (?, ?)
+        `);
+        
+        stmt.run(activityId, documentId);
+        console.log('[RELATIONS] Basic force-link successful');
+      } catch (finalError) {
+        console.error("[RELATIONS] Critical error in force-linking document:", finalError);
+        throw finalError;
+      }
+    }
   }
 }
 

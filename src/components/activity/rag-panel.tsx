@@ -29,7 +29,7 @@ interface RagPanelProps {
 export function RagPanel({ activity }: RagPanelProps) {
   const { toast } = useToast();
   const { orgId } = useAuth();
-  const [isEnabled, setIsEnabled] = useState(activity.ragEnabled || false);
+  const [isEnabled, setIsEnabled] = useState(activity.ragEnabled ?? false);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [libraryDocuments, setLibraryDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,22 +37,27 @@ export function RagPanel({ activity }: RagPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    setIsEnabled(activity.ragEnabled ?? false);
     fetchDocuments();
     fetchLibraryDocuments();
-  }, []);
+  }, [activity._id, activity.ragEnabled]);
 
   const fetchDocuments = async () => {
     try {
+      setIsLoading(true);
       const response = await fetch(`/api/documents?activityId=${activity._id}`);
       if (!response.ok) throw new Error('Failed to fetch documents');
       const data = await response.json();
       setDocuments(data);
     } catch (error) {
+      console.error('Error fetching documents:', error);
       toast({
         title: "Error",
         description: "Failed to load documents",
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -62,14 +67,13 @@ export function RagPanel({ activity }: RagPanelProps) {
       if (!response.ok) throw new Error('Failed to fetch library');
       const data = await response.json();
       setLibraryDocuments(data);
-      setIsLoading(false);
     } catch (error) {
+      console.error('Error fetching library documents:', error);
       toast({
         title: "Error",
         description: "Failed to load asset library",
         variant: "destructive",
       });
-      setIsLoading(false);
     }
   };
 
@@ -103,7 +107,7 @@ export function RagPanel({ activity }: RagPanelProps) {
     }
   };
 
-  const handleUploadComplete = async (fileUrl: string, fileName: string) => {
+  const handleUploadComplete = async (fileUrl: string, fileName: string, fileSize: number) => {
     if (!orgId) {
       toast({
         title: "Error",
@@ -114,22 +118,38 @@ export function RagPanel({ activity }: RagPanelProps) {
     }
 
     try {
-      const newDocument: Document = {
-        _id: uuidv4(),
+      console.log('Document upload completed, registering with API:', {
         filename: fileName,
-        originalName: fileName,
-        mimeType: 'application/octet-stream',
-        size: 0, // Size will be updated after upload
         url: fileUrl,
-        orgId,
-        activityIds: [activity._id],
-        metadata: {},
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
+        activityId: activity._id
+      });
       
-      setDocuments([...documents, newDocument]);
-      await fetchLibraryDocuments();
+      // Register document with the API
+      const response = await fetch('/api/documents', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          filename: fileName,
+          url: fileUrl,
+          mimeType: fileName.endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream',
+          size: fileSize,
+          activityId: activity._id
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to register document:', errorText);
+        throw new Error(`Failed to register document: ${response.status} ${response.statusText}`);
+      }
+      
+      const document = await response.json();
+      console.log('Document registered successfully:', document);
+      
+      // Add the new document to the list and refresh
+      setDocuments([...documents, document]);
       setDialogOpen(false);
 
       toast({
@@ -137,9 +157,10 @@ export function RagPanel({ activity }: RagPanelProps) {
         description: "Document uploaded successfully",
       });
     } catch (error) {
+      console.error('Document registration error:', error);
       toast({
         title: "Error",
-        description: "Failed to upload document",
+        description: error instanceof Error ? error.message : "Failed to register document",
         variant: "destructive",
       });
     }
