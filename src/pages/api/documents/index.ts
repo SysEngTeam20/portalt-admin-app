@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuth } from "@clerk/nextjs/server";
 import { v4 as uuidv4 } from 'uuid';
 import { getDbClient, Relations, safeLog, isUsingMongo } from "@/lib/db";
+import db from "@/lib/sqlite";
 import { uploadDocument } from "@/lib/cos";
 import { IncomingForm } from 'formidable';
 import fs from 'fs';
@@ -37,6 +38,8 @@ export default async function handler(
     if (req.method === 'GET') {
       const activityId = req.query.activityId as string | undefined;
 
+      console.log('[DOCUMENTS_API] Fetching documents:', { activityId, orgId });
+
       const client = getDbClient();
       const db = client.db("cluster0");
       const documentsCollection = db.collection("documents");
@@ -44,8 +47,27 @@ export default async function handler(
       let documents = [];
       
       if (activityId) {
+        // First verify the activity exists
+        console.log('[DOCUMENTS_API] Verifying activity exists:', activityId);
+        const activitiesCollection = db.collection("activities");
+        const activity = await activitiesCollection.findOne({ _id: activityId });
+        
+        if (!activity) {
+          console.error(`[DOCUMENTS_API] Activity not found: ${activityId}`);
+          return res.status(404).json({ 
+            message: "Activity not found",
+            error: "ACTIVITY_NOT_FOUND"
+          });
+        }
+        
+        // Activity exists, proceed to get associated documents
+        console.log('[DOCUMENTS_API] Activity found, getting documents');
+        
         // Get documents associated with the activity
+        console.log('[DOCUMENTS_API] Getting documents for activity:', activityId);
         const documentIds = await Relations.getDocumentsByActivityId(activityId);
+        console.log('[DOCUMENTS_API] Found document IDs:', documentIds);
+        
         if (documentIds.length > 0) {
           // If using MongoDB, fetch in batch
           if (isUsingMongo()) {
@@ -55,17 +77,40 @@ export default async function handler(
             } as any);
             documents = await cursor.toArray();
           } else {
-            // For SQLite, fetch one by one
-            const promises = documentIds.map(id => 
-              documentsCollection.findOne({ _id: id, orgId } as any)
-            );
-            documents = (await Promise.all(promises)).filter(Boolean);
+            // For SQLite, fetch one by one with better error handling
+            const docs = [];
+            for (const id of documentIds) {
+              console.log('[DOCUMENTS_API] Fetching document by ID:', id);
+              try {
+                const doc = await documentsCollection.findOne({ _id: id });
+                if (doc) {
+                  // Verify organization ownership
+                  if (doc.orgId === orgId) {
+                    docs.push(doc);
+                  } else {
+                    console.log('[DOCUMENTS_API] Document belongs to different org:', {
+                      docId: id,
+                      docOrgId: doc.orgId,
+                      requestOrgId: orgId
+                    });
+                  }
+                } else {
+                  console.log('[DOCUMENTS_API] Document not found:', id);
+                }
+              } catch (err) {
+                console.error('[DOCUMENTS_API] Error fetching document:', id, err);
+              }
+            }
+            documents = docs;
           }
         }
+        console.log('[DOCUMENTS_API] Retrieved documents:', documents.length);
       } else {
         // Get all organization's documents
+        console.log('[DOCUMENTS_API] Getting all documents for org:', orgId);
         const cursor = documentsCollection.find({ orgId } as any);
         documents = await cursor.toArray();
+        console.log('[DOCUMENTS_API] Retrieved all documents:', documents.length);
       }
 
       return res.status(200).json(documents);
@@ -75,7 +120,29 @@ export default async function handler(
     else if (req.method === 'POST') {
       // Check if this is a direct registration (no file upload)
       if (req.headers['content-type']?.includes('application/json')) {
-        const { filename, url, mimeType, activityId } = req.body;
+        // Manual JSON parsing since bodyParser is disabled
+        let body;
+        try {
+          // Get the raw request body as a string
+          const buffer = await new Promise<Buffer>((resolve, reject) => {
+            const chunks: Buffer[] = [];
+            req.on('data', (chunk) => chunks.push(chunk));
+            req.on('end', () => resolve(Buffer.concat(chunks)));
+            req.on('error', reject);
+          });
+          
+          // Parse the JSON
+          body = JSON.parse(buffer.toString());
+          console.log('[DOCUMENTS_API] Received JSON body:', body);
+        } catch (error) {
+          console.error('[DOCUMENTS_API] Error parsing JSON body:', error);
+          return res.status(400).json({
+            message: "Failed to parse request body",
+            error: "INVALID_JSON"
+          });
+        }
+        
+        const { filename, url, mimeType, activityId, size } = body;
         
         if (!filename || !url) {
           return res.status(400).json({ 
@@ -87,6 +154,7 @@ export default async function handler(
         try {
           const client = getDbClient();
           const db = client.db("cluster0");
+          const documentsCollection = db.collection("documents");
 
           // Create document metadata
           const document = {
@@ -94,7 +162,7 @@ export default async function handler(
             filename,
             originalName: filename,
             mimeType: mimeType || 'application/octet-stream',
-            size: 0, // Size not available for direct registration
+            size: size || 0, // Use provided size or default to 0
             url,
             orgId,
             activityIds: activityId ? [activityId] : [] as string[],
@@ -103,7 +171,32 @@ export default async function handler(
             updatedAt: new Date(),
           };
 
-          await db.collection("documents").insertOne(document);
+          await documentsCollection.insertOne(document);
+          
+          // Create relation in relations table if activityId is provided
+          if (activityId) {
+            try {
+              console.log('[DOCUMENTS_API] Linking document to activity:', {
+                documentId: document._id,
+                activityId
+              });
+              
+              if (!isUsingMongo()) {
+                // Direct database link - create a raw SQL statement for better compatibility
+                console.log('[DOCUMENTS_API] Using direct linking to bypass Relations class');
+                await Relations.forceLinkDocumentToActivity(document._id, activityId);
+              } else {
+                // Use Relations helper for MongoDB
+                await Relations.linkDocumentToActivity(document._id, activityId);
+              }
+              
+              console.log('[DOCUMENTS_API] Successfully linked document to activity');
+            } catch (error) {
+              console.error("[DOCUMENTS_API] Error linking document to activity:", error);
+              // Continue anyway since the document was created
+            }
+          }
+          
           return res.status(201).json(document);
         } catch (error) {
           console.error("[DOCUMENTS_API] Registration error:", error);
@@ -182,7 +275,34 @@ export default async function handler(
           updatedAt: new Date(),
         };
 
+        console.log('[DOCUMENTS_API] Creating document:', document);
+
         await db.collection("documents").insertOne(document);
+        
+        // Create relation in relations table if activityId is provided
+        if (activityId) {
+          try {
+            console.log('[DOCUMENTS_API] Linking document to activity:', {
+              documentId: document._id,
+              activityId
+            });
+            
+            if (!isUsingMongo()) {
+              // Direct database link - create a raw SQL statement for better compatibility
+              console.log('[DOCUMENTS_API] Using direct linking to bypass Relations class');
+              await Relations.forceLinkDocumentToActivity(document._id, activityId);
+            } else {
+              // Use Relations helper for MongoDB
+              await Relations.linkDocumentToActivity(document._id, activityId);
+            }
+            
+            console.log('[DOCUMENTS_API] Successfully linked document to activity');
+          } catch (error) {
+            console.error("[DOCUMENTS_API] Error linking document to activity:", error);
+            // Continue anyway since the document was created
+          }
+        }
+        
         return res.status(201).json(document);
       } catch (error) {
         console.error("[DOCUMENTS_API] Upload error:", error);
