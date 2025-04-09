@@ -57,6 +57,10 @@ export default async function handler(
     
     console.log("[LLM_DOCUMENTS_GET] Token payload:", JSON.stringify(payload));
     
+    // Get activityId from payload if it exists (but we'll ignore its validity)
+    const activityId = payload?.activityId?.toString();
+    console.log("[LLM_DOCUMENTS_GET] Activity ID from token:", activityId);
+    
     // Get all documents from the database
     const client = getDbClient();
     const db = client.db("cluster0");
