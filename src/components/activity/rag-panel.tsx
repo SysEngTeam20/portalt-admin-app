@@ -271,9 +271,10 @@ export function RagPanel({ activity }: RagPanelProps) {
                   {/* Upload Option */}
                   <DirectUpload
                     onUploadComplete={handleUploadComplete}
-                    accept=".pdf,.doc,.docx,.txt"
+                    accept=".txt"
                     label="Upload Document"
                     maxSize={1024 * 1024 * 1024} // 1GB
+                    helperText="Only .txt files allowed (max 1GB)"
                   />
 
                   {/* Select from Library Option */}

@@ -57,150 +57,63 @@ export default async function handler(
     
     console.log("[LLM_DOCUMENTS_GET] Token payload:", JSON.stringify(payload));
     
-    // First try to get sceneId directly from payload
-    let sceneId: string | undefined = payload?.sceneId?.toString();
-    let activityId: string | undefined = payload?.activityId?.toString();
+    // Get activityId from payload if it exists (but we'll ignore its validity)
+    const activityId = payload?.activityId?.toString();
+    console.log("[LLM_DOCUMENTS_GET] Activity ID from token:", activityId);
     
-    // If no sceneId in payload but we have activityId, try to find a scene for that activity
-    if (!sceneId && activityId) {
-      console.log("[LLM_DOCUMENTS_GET] No sceneId found, trying to find scene for activityId:", activityId);
-      const client = getDbClient();
-      const db = client.db("cluster0");
-      const scenesCollection = db.collection<Scene>("scenes");
-      
-      // Try to find a scene by activity_id or activityId
-      const scene = await scenesCollection.findOne({
-        $or: [
-          { activity_id: activityId },
-          { activityId: activityId }
-        ]
-      });
-      
-      if (scene) {
-        sceneId = scene._id || scene.id;
-        console.log("[LLM_DOCUMENTS_GET] Found scene for activity:", sceneId);
-      }
-    }
-    
-    // If we have an activityId but no sceneId, we can proceed with just the activityId
-    if (!sceneId && !activityId) {
-      console.log("[LLM_DOCUMENTS_GET] No valid sceneId or activityId found in token");
-      return res.status(401).json({ message: "Invalid token: no sceneId or activityId found" });
-    }
-
-    console.log("[LLM_DOCUMENTS_GET] Request received with sceneId:", sceneId, "activityId:", activityId);
-    
+    // Get all documents from the database
     const client = getDbClient();
     const db = client.db("cluster0");
-
-    // Log all collections to check if we're accessing the right ones
-    console.log("[LLM_DOCUMENTS_GET] Available collections:", 
-                Object.keys(db).includes('listCollections') ? 
-                'Has listCollections method' : 'No listCollections method');
-
-    const scenesCollection = db.collection<Scene>("scenes");
-    const activitiesCollection = db.collection<Activity>("activities");
+    const documentsCollection = db.collection<Document>("documents");
     
-    // If we have an activityId but no sceneId, we can skip scene lookup
-    let scene: Scene | null = null;
-    if (sceneId) {
-      // DEBUG: Get total count of scenes for debugging
-      const totalScenes = await scenesCollection.find({}).length;
-      console.log("[LLM_DOCUMENTS_GET] Total scenes in DB:", totalScenes);
-      
-      // DEBUG: Try to get ALL scenes with a simple query
-      const someScenes = await scenesCollection.find({});
-      console.log("[LLM_DOCUMENTS_GET] First few scenes:", 
-                  JSON.stringify(someScenes.slice(0, 3)));
-      
-      // Try to find scene by either _id or id field
-      scene = await scenesCollection.findOne({
-        _id: sceneId
-      });
-      
-      // If not found by _id, try the id field
-      if (!scene) {
-        console.log("[LLM_DOCUMENTS_GET] Scene not found by _id, trying id field");
-        scene = await scenesCollection.findOne({
-          id: sceneId
-        });
-      }
-      
-      // If still no scene found, try looking up by scene_id field in scenes_configuration
-      let sceneConfig: SceneConfiguration | null = null;
-      if (!scene) {
-        console.log("[LLM_DOCUMENTS_GET] Scene not found by id either, trying scenes_configuration lookup");
-        const sceneConfigCollection = db.collection<SceneConfiguration>("scenes_configuration");
-        
-        // Check if the scenes_configuration collection exists
-        const hasSceneConfigs = await sceneConfigCollection.find({}).length > 0;
-        console.log("[LLM_DOCUMENTS_GET] Has scene configs?", hasSceneConfigs);
-        
-        // Try to find config with scene_id
-        sceneConfig = await sceneConfigCollection.findOne({
-          scene_id: sceneId
-        });
-        
-        // If not found, try with camelCase
-        if (!sceneConfig) {
-          console.log("[LLM_DOCUMENTS_GET] Config not found with snake_case, trying camelCase");
-          const camelCaseConfig = await sceneConfigCollection.findOne({
-            sceneId: sceneId
-          });
+    // Get all documents
+    const allDocuments = await documentsCollection.find({}).toArray();
+    console.log("[LLM_DOCUMENTS_GET] Found", allDocuments.length, "documents total");
+    
+    // Generate short-lived signed URLs for each document
+    const documentsWithUrls = await Promise.all(
+      allDocuments.map(async (doc: Document) => {
+        let url;
+        try {
+          console.log("[LLM_DOCUMENTS_GET] Processing document URL:", doc.url);
           
-          if (camelCaseConfig) {
-            console.log("[LLM_DOCUMENTS_GET] Found config with camelCase:", JSON.stringify(camelCaseConfig));
-            sceneConfig = camelCaseConfig;
-            
-            // Handle both scene_id and sceneId
-            const configSceneId = camelCaseConfig.scene_id || camelCaseConfig.sceneId;
-            
-            if (configSceneId) {
-              console.log("[LLM_DOCUMENTS_GET] Looking up scene by configSceneId:", configSceneId);
-              scene = await scenesCollection.findOne({
-                _id: configSceneId
-              }) || await scenesCollection.findOne({
-                id: configSceneId 
-              });
+          // Check if the URL starts with "documents/" or "uploads/" which indicates it's a key
+          if (doc.url.startsWith('documents/') || doc.url.startsWith('uploads/')) {
+            // This is a COS key, generate signed URL
+            url = await getSignedUrl(doc.url, 900); // 15 minutes expiry
+            console.log("[LLM_DOCUMENTS_GET] Generated signed URL from key");
+          } 
+          // Check if it's a full URL with hostname and protocol
+          else if (doc.url.startsWith('http')) {
+            // If it already contains a signature (has query params), use as-is
+            if (doc.url.includes('?X-Amz-Algorithm=')) {
+              console.log("[LLM_DOCUMENTS_GET] Using existing signed URL");
+              url = doc.url;
+            } else {
+              // It's a regular URL without signature, extract the key part
+              try {
+                const urlObj = new URL(doc.url);
+                const pathParts = urlObj.pathname.split('/');
+                // The key is everything after the bucket name in the path
+                const key = pathParts.slice(2).join('/');
+                console.log("[LLM_DOCUMENTS_GET] Extracted key from URL:", key);
+                url = await getSignedUrl(key, 900); // 15 minutes expiry
+              } catch (urlError) {
+                console.error("[LLM_DOCUMENTS_GET] Error parsing URL:", urlError);
+                url = doc.url; // Fallback to original URL
+              }
             }
+          } else {
+            // Assume it's a key if it doesn't match other patterns
+            url = await getSignedUrl(doc.url, 900);
+            console.log("[LLM_DOCUMENTS_GET] Treated as key by default");
           }
-        } else {
-          console.log("[LLM_DOCUMENTS_GET] Found scene config:", JSON.stringify(sceneConfig));
           
-          // Try both _id and id fields when looking up by scene_id from config
-          if (sceneConfig.scene_id) {
-            console.log("[LLM_DOCUMENTS_GET] Looking up scene by config.scene_id:", sceneConfig.scene_id);
-            scene = await scenesCollection.findOne({
-              _id: sceneConfig.scene_id
-            });
-            
-            if (!scene) {
-              scene = await scenesCollection.findOne({
-                id: sceneConfig.scene_id
-              });
-            }
-          }
+          console.log("[LLM_DOCUMENTS_GET] Final URL:", url.substring(0, 50) + "...");
+        } catch (error) {
+          console.error("[LLM_DOCUMENTS_GET] Error generating URL for document:", doc._id, error);
+          url = doc.url; // Fallback to the original URL
         }
-      }
-      
-      // LAST RESORT: Try a substring match on id or _id
-      if (!scene) {
-        console.log("[LLM_DOCUMENTS_GET] Attempting substring match on id field as last resort");
-        const allScenes = await scenesCollection.find({});
-        
-        for (const possibleScene of allScenes) {
-          const sceneIdField = possibleScene.id || possibleScene._id || "";
-          if (sceneIdField.toString().includes(sceneId)) {
-            console.log("[LLM_DOCUMENTS_GET] Found scene via substring match:", JSON.stringify(possibleScene));
-            scene = possibleScene;
-            break;
-          }
-        }
-      }
-      
-      // SPECIAL CASE: If we found a scene configuration but no scene, create a virtual scene object
-      if (!scene && sceneConfig) {
-        console.log("[LLM_DOCUMENTS_GET] No scene found but scene configuration exists. Looking up activities.");
         
         // Get all activities to find potential matches
         const allActivities = await activitiesCollection.find({});
