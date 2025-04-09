@@ -11,6 +11,7 @@ interface DirectUploadProps {
   accept?: string;
   label?: string;
   maxSize?: number; // in bytes
+  helperText?: string;
 }
 
 // Utility function to format file size
@@ -26,7 +27,8 @@ export function DirectUpload({
   onUploadComplete, 
   accept = '*/*',
   label = 'Upload File',
-  maxSize = 1024 * 1024 * 1024 // 1GB default
+  maxSize = 1024 * 1024 * 1024, // 1GB default
+  helperText
 }: DirectUploadProps) {
   const { toast } = useToast();
   const [isUploading, setIsUploading] = useState(false);
@@ -35,6 +37,16 @@ export function DirectUpload({
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    // Check file type
+    if (!file.name.toLowerCase().endsWith('.txt')) {
+      toast({
+        title: "Invalid file type",
+        description: "Only .txt files are allowed",
+        variant: "destructive",
+      });
+      return;
+    }
 
     // Check file size
     if (file.size > maxSize) {
@@ -251,7 +263,7 @@ export function DirectUpload({
         )}
       </Button>
       <p className="text-sm text-muted-foreground mt-2">
-        Max size: {formatFileSize(maxSize)}
+        {helperText || `Max size: ${formatFileSize(maxSize)}`}
       </p>
     </div>
   );
