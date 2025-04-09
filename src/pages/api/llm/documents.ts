@@ -72,12 +72,56 @@ export default async function handler(
     
     // Generate short-lived signed URLs for each document
     const documentsWithUrls = await Promise.all(
-      allDocuments.map(async (doc: Document) => ({
-        id: doc._id,
-        name: doc.filename,
-        url: await getSignedUrl(doc.url, 900), // 15 minutes expiry
-        metadata: doc.metadata
-      }))
+      allDocuments.map(async (doc: Document) => {
+        let url;
+        try {
+          console.log("[LLM_DOCUMENTS_GET] Processing document URL:", doc.url);
+          
+          // Check if the URL starts with "documents/" or "uploads/" which indicates it's a key
+          if (doc.url.startsWith('documents/') || doc.url.startsWith('uploads/')) {
+            // This is a COS key, generate signed URL
+            url = await getSignedUrl(doc.url, 900); // 15 minutes expiry
+            console.log("[LLM_DOCUMENTS_GET] Generated signed URL from key");
+          } 
+          // Check if it's a full URL with hostname and protocol
+          else if (doc.url.startsWith('http')) {
+            // If it already contains a signature (has query params), use as-is
+            if (doc.url.includes('?X-Amz-Algorithm=')) {
+              console.log("[LLM_DOCUMENTS_GET] Using existing signed URL");
+              url = doc.url;
+            } else {
+              // It's a regular URL without signature, extract the key part
+              try {
+                const urlObj = new URL(doc.url);
+                const pathParts = urlObj.pathname.split('/');
+                // The key is everything after the bucket name in the path
+                const key = pathParts.slice(2).join('/');
+                console.log("[LLM_DOCUMENTS_GET] Extracted key from URL:", key);
+                url = await getSignedUrl(key, 900); // 15 minutes expiry
+              } catch (urlError) {
+                console.error("[LLM_DOCUMENTS_GET] Error parsing URL:", urlError);
+                url = doc.url; // Fallback to original URL
+              }
+            }
+          } else {
+            // Assume it's a key if it doesn't match other patterns
+            url = await getSignedUrl(doc.url, 900);
+            console.log("[LLM_DOCUMENTS_GET] Treated as key by default");
+          }
+          
+          console.log("[LLM_DOCUMENTS_GET] Final URL:", url.substring(0, 50) + "...");
+        } catch (error) {
+          console.error("[LLM_DOCUMENTS_GET] Error generating URL for document:", doc._id, error);
+          url = doc.url; // Fallback to the original URL
+        }
+        
+        return {
+          id: doc._id,
+          name: doc.filename,
+          url: url,
+          metadata: doc.metadata
+        };
+      })
     );
 
     console.log("[LLM_DOCUMENTS_GET] Successfully generated signed URLs for", documentsWithUrls.length, "documents");
